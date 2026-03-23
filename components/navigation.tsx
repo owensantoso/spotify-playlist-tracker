@@ -18,6 +18,8 @@ type NavigationProps = {
 
 type AuthStatus = {
   isAuthenticated: boolean;
+  isAdmin: boolean;
+  spotifyUserId: string | null;
 };
 
 type NowPlayingResponse = {
@@ -61,7 +63,11 @@ function formatMs(ms: number) {
 export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPlaying }: NavigationProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [authStatus, setAuthStatus] = useState<AuthStatus>({ isAuthenticated: false });
+  const [authStatus, setAuthStatus] = useState<AuthStatus>({
+    isAuthenticated: false,
+    isAdmin: false,
+    spotifyUserId: null,
+  });
   const [nowPlaying, setNowPlaying] = useState<NowPlayingTrack | null>(initialNowPlaying);
   const [progressMs, setProgressMs] = useState(initialNowPlaying?.progressMs ?? 0);
   const [controlPending, setControlPending] = useState<string | null>(null);
@@ -210,7 +216,7 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
   }
 
   const visibleAdminLinks =
-    authStatus.isAuthenticated || pathname.startsWith("/admin") || pathname === "/setup"
+    authStatus.isAdmin || pathname.startsWith("/admin") || pathname === "/setup"
       ? adminLinks
       : [];
 
@@ -286,6 +292,23 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
                 </Link>
               );
             })}
+            {authStatus.isAuthenticated ? (
+              <form action="/api/auth/logout" method="post">
+                <button
+                  type="submit"
+                  className="rounded-full border border-white/12 px-4 py-2 text-sm text-stone-200 transition hover:border-white/25 hover:text-white"
+                >
+                  Log out
+                </button>
+              </form>
+            ) : (
+              <Link
+                href={`/api/auth/spotify/login?mode=viewer&next=${encodeURIComponent(pathname || "/")}`}
+                className="rounded-full border border-[--color-accent]/45 bg-[--color-accent]/10 px-4 py-2 text-sm text-[--color-accent] transition hover:bg-[--color-accent]/20"
+              >
+                Sign in with Spotify
+              </Link>
+            )}
           </nav>
         </div>
 
@@ -387,7 +410,29 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
               </div>
             </div>
           </div>
-        ) : null}
+        ) : (
+          <div className="rounded-[1.8rem] border border-white/10 bg-black/10 px-4 py-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[--color-accent]">
+                  Personal now playing
+                </p>
+                <p className="text-lg font-semibold text-stone-100">
+                  Sign in with Spotify to see your own current track here.
+                </p>
+                <p className="text-sm text-stone-400">
+                  Your Spotify account is saved in the app database so future user-specific features can build on it.
+                </p>
+              </div>
+              <Link
+                href={`/api/auth/spotify/login?mode=viewer&next=${encodeURIComponent(pathname || "/")}`}
+                className="w-fit rounded-full border border-[--color-accent]/45 bg-[--color-accent]/10 px-4 py-2 text-sm text-[--color-accent] transition hover:bg-[--color-accent]/20"
+              >
+                Sign in with Spotify
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
     </header>
   );

@@ -7,12 +7,38 @@ import { signValue, verifySignedValue } from "@/lib/security";
 
 const AUTH_STATE_COOKIE = "fotm_spotify_oauth_state";
 
-export async function createOAuthState() {
-  const value = randomUUID();
-  const signature = signValue(value);
+export type OAuthIntent = "admin" | "viewer";
+
+type OAuthStatePayload = {
+  state: string;
+  intent: OAuthIntent;
+  redirectTo: string;
+};
+
+function encodePayload(payload: OAuthStatePayload) {
+  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+}
+
+function decodePayload(value: string) {
+  return JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as OAuthStatePayload;
+}
+
+export async function createOAuthState({
+  intent,
+  redirectTo,
+}: {
+  intent: OAuthIntent;
+  redirectTo: string;
+}) {
+  const payload = encodePayload({
+    state: randomUUID(),
+    intent,
+    redirectTo,
+  });
+  const signature = signValue(payload);
   const store = await cookies();
 
-  store.set(AUTH_STATE_COOKIE, `${value}.${signature}`, {
+  store.set(AUTH_STATE_COOKIE, `${payload}.${signature}`, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
@@ -20,7 +46,7 @@ export async function createOAuthState() {
     maxAge: 60 * 10,
   });
 
-  return value;
+  return decodePayload(payload).state;
 }
 
 export async function consumeOAuthState(expectedState: string) {
@@ -29,13 +55,18 @@ export async function consumeOAuthState(expectedState: string) {
   store.delete(AUTH_STATE_COOKIE);
 
   if (!raw) {
-    return false;
+    return null;
   }
 
-  const [value, signature] = raw.split(".");
-  if (!value || !signature) {
-    return false;
+  const [payload, signature] = raw.split(".");
+  if (!payload || !signature || !verifySignedValue(payload, signature)) {
+    return null;
   }
 
-  return value === expectedState && verifySignedValue(value, signature);
+  try {
+    const decoded = decodePayload(payload);
+    return decoded.state === expectedState ? decoded : null;
+  } catch {
+    return null;
+  }
 }

@@ -5,23 +5,24 @@ import type { NextResponse } from "next/server";
 
 import { signValue, verifySignedValue } from "@/lib/security";
 
-export const SESSION_COOKIE_NAME = "fotm_admin_session";
+export const ADMIN_SESSION_COOKIE_NAME = "fotm_admin_session";
+export const VIEWER_SESSION_COOKIE_NAME = "fotm_viewer_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
-type AdminSessionPayload = {
+type SpotifySessionPayload = {
   spotifyUserId: string;
   issuedAt: string;
 };
 
-function encodePayload(payload: AdminSessionPayload) {
+function encodePayload(payload: SpotifySessionPayload) {
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
 function decodePayload(value: string) {
-  return JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as AdminSessionPayload;
+  return JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as SpotifySessionPayload;
 }
 
-function buildAdminSessionCookieValue(spotifyUserId: string) {
+function buildSessionCookieValue(spotifyUserId: string) {
   const payload = encodePayload({
     spotifyUserId,
     issuedAt: new Date().toISOString(),
@@ -41,28 +42,27 @@ function getSessionCookieOptions() {
   };
 }
 
-export async function setAdminSession(spotifyUserId: string) {
+async function setSessionCookie(cookieName: string, spotifyUserId: string) {
   const store = await cookies();
-
-  store.set(SESSION_COOKIE_NAME, buildAdminSessionCookieValue(spotifyUserId), getSessionCookieOptions());
+  store.set(cookieName, buildSessionCookieValue(spotifyUserId), getSessionCookieOptions());
 }
 
-export function setAdminSessionOnResponse(response: NextResponse, spotifyUserId: string) {
+function setSessionCookieOnResponse(response: NextResponse, cookieName: string, spotifyUserId: string) {
   response.cookies.set(
-    SESSION_COOKIE_NAME,
-    buildAdminSessionCookieValue(spotifyUserId),
+    cookieName,
+    buildSessionCookieValue(spotifyUserId),
     getSessionCookieOptions(),
   );
 }
 
-export async function clearAdminSession() {
+async function clearSessionCookie(cookieName: string) {
   const store = await cookies();
-  store.delete(SESSION_COOKIE_NAME);
+  store.delete(cookieName);
 }
 
-export async function getAdminSession() {
+async function getSession(cookieName: string) {
   const store = await cookies();
-  const raw = store.get(SESSION_COOKIE_NAME)?.value;
+  const raw = store.get(cookieName)?.value;
   if (!raw) {
     return null;
   }
@@ -77,4 +77,36 @@ export async function getAdminSession() {
   } catch {
     return null;
   }
+}
+
+export async function setAdminSession(spotifyUserId: string) {
+  await setSessionCookie(ADMIN_SESSION_COOKIE_NAME, spotifyUserId);
+}
+
+export function setAdminSessionOnResponse(response: NextResponse, spotifyUserId: string) {
+  setSessionCookieOnResponse(response, ADMIN_SESSION_COOKIE_NAME, spotifyUserId);
+}
+
+export async function clearAdminSession() {
+  await clearSessionCookie(ADMIN_SESSION_COOKIE_NAME);
+}
+
+export async function getAdminSession() {
+  return getSession(ADMIN_SESSION_COOKIE_NAME);
+}
+
+export async function setViewerSession(spotifyUserId: string) {
+  await setSessionCookie(VIEWER_SESSION_COOKIE_NAME, spotifyUserId);
+}
+
+export function setViewerSessionOnResponse(response: NextResponse, spotifyUserId: string) {
+  setSessionCookieOnResponse(response, VIEWER_SESSION_COOKIE_NAME, spotifyUserId);
+}
+
+export async function clearViewerSession() {
+  await clearSessionCookie(VIEWER_SESSION_COOKIE_NAME);
+}
+
+export async function getViewerSession() {
+  return getSession(VIEWER_SESSION_COOKIE_NAME);
 }

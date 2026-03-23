@@ -51,7 +51,7 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
               </>
             ) : (
               <Link
-                href="/api/auth/spotify/login"
+                href="/api/auth/spotify/login?mode=admin&next=/setup"
                 className="rounded-full bg-[--color-accent] px-4 py-2 text-sm font-semibold text-[--color-ink] transition hover:brightness-110"
               >
                 Connect Spotify

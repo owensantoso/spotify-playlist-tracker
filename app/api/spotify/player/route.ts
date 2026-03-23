@@ -7,9 +7,11 @@ import {
   skipToPrevious,
   SpotifyApiError,
 } from "@/lib/spotify/client";
-import { getAdminSession } from "@/lib/session";
-import { withAdminAccessToken } from "@/lib/services/admin-service";
-import { getNowPlayingTrack } from "@/lib/services/now-playing-service";
+import {
+  getCurrentSpotifyAuth,
+  getNowPlayingTrack,
+  withCurrentSpotifyAccessToken,
+} from "@/lib/services/now-playing-service";
 
 const supportedActions = ["play", "pause", "next", "previous"] as const;
 
@@ -20,8 +22,8 @@ function isPlayerAction(value: string): value is PlayerAction {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getAdminSession();
-  if (!session?.spotifyUserId) {
+  const auth = await getCurrentSpotifyAuth();
+  if (!auth?.spotifyUserId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await withAdminAccessToken(async (accessToken) => {
+    await withCurrentSpotifyAccessToken(async (accessToken) => {
       if (body.action === "play") {
         await playPlayback(accessToken);
         return;

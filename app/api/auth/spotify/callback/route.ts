@@ -4,7 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { consumeOAuthState } from "@/lib/auth-state";
 import { exchangeCodeForTokens, getCurrentUser } from "@/lib/spotify/client";
 import { upsertAdminAccount } from "@/lib/services/admin-service";
-import { setAdminSessionOnResponse } from "@/lib/session";
+import { upsertUserAccount } from "@/lib/services/user-account-service";
+import { setAdminSessionOnResponse, setViewerSessionOnResponse } from "@/lib/session";
 import { absoluteUrl } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
@@ -15,8 +16,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(absoluteUrl("/setup?error=missing_oauth_params"));
   }
 
-  const isValidState = await consumeOAuthState(state);
-  if (!isValidState) {
+  const oauthState = await consumeOAuthState(state);
+  if (!oauthState) {
     return NextResponse.redirect(absoluteUrl("/setup?error=invalid_oauth_state"));
   }
 
@@ -24,18 +25,38 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeCodeForTokens(code);
     const profile = await getCurrentUser(tokens.access_token);
 
-    await upsertAdminAccount({
+    const accountParams = {
       profile,
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token ?? "",
       expiresInSeconds: tokens.expires_in,
       scope: tokens.scope,
-    });
-    const response = NextResponse.redirect(absoluteUrl("/setup?connected=1"));
-    setAdminSessionOnResponse(response, profile.id);
-    revalidatePath("/setup");
-    revalidatePath("/admin/settings");
-    revalidatePath("/admin/logs");
+    };
+
+    if (oauthState.intent === "admin") {
+      await upsertAdminAccount(accountParams);
+    } else {
+      await upsertUserAccount(accountParams);
+    }
+
+    const redirectTarget =
+      oauthState.intent === "admin"
+        ? `${oauthState.redirectTo}${oauthState.redirectTo.includes("?") ? "&" : "?"}connected=1`
+        : oauthState.redirectTo;
+    const response = NextResponse.redirect(absoluteUrl(redirectTarget));
+    setViewerSessionOnResponse(response, profile.id);
+
+    if (oauthState.intent === "admin") {
+      setAdminSessionOnResponse(response, profile.id);
+      revalidatePath("/setup");
+      revalidatePath("/admin/settings");
+      revalidatePath("/admin/logs");
+    }
+
+    revalidatePath("/");
+    revalidatePath("/active");
+    revalidatePath("/history");
+    revalidatePath("/contributors");
 
     return response;
   } catch (error) {

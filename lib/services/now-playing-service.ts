@@ -1,9 +1,10 @@
 import "server-only";
 
 import { romanizeText } from "@/lib/romanization";
-import { getAdminSession } from "@/lib/session";
+import { getAdminSession, getViewerSession } from "@/lib/session";
 import { SpotifyApiError, getPlaybackState } from "@/lib/spotify/client";
 import { withAdminAccessToken } from "@/lib/services/admin-service";
+import { withUserAccessToken } from "@/lib/services/user-account-service";
 import type { SpotifyTrack } from "@/lib/spotify/types";
 
 export type NowPlayingTrack = {
@@ -25,20 +26,60 @@ type SpotifyPlayableTrack = SpotifyTrack & {
   id: string;
 };
 
+type CurrentSpotifyAuth =
+  | { kind: "viewer"; spotifyUserId: string }
+  | { kind: "admin"; spotifyUserId: string }
+  | null;
+
 function isPlayableTrack(
   track: SpotifyTrack | { type: string } | null | undefined,
 ): track is SpotifyPlayableTrack {
   return Boolean(track && track.type === "track" && "id" in track && track.id);
 }
 
+export async function getCurrentSpotifyAuth(): Promise<CurrentSpotifyAuth> {
+  const [viewerSession, adminSession] = await Promise.all([getViewerSession(), getAdminSession()]);
+
+  if (viewerSession?.spotifyUserId) {
+    return {
+      kind: "viewer",
+      spotifyUserId: viewerSession.spotifyUserId,
+    };
+  }
+
+  if (adminSession?.spotifyUserId) {
+    return {
+      kind: "admin",
+      spotifyUserId: adminSession.spotifyUserId,
+    };
+  }
+
+  return null;
+}
+
+export async function withCurrentSpotifyAccessToken<T>(
+  callback: (accessToken: string, auth: Exclude<CurrentSpotifyAuth, null>) => Promise<T>,
+) {
+  const auth = await getCurrentSpotifyAuth();
+  if (!auth) {
+    throw new Error("No Spotify session is active");
+  }
+
+  if (auth.kind === "viewer") {
+    return withUserAccessToken(auth.spotifyUserId, async (accessToken) => callback(accessToken, auth));
+  }
+
+  return withAdminAccessToken(async (accessToken) => callback(accessToken, auth));
+}
+
 export async function getNowPlayingTrack(): Promise<NowPlayingTrack | null> {
-  const session = await getAdminSession();
-  if (!session?.spotifyUserId) {
+  const auth = await getCurrentSpotifyAuth();
+  if (!auth?.spotifyUserId) {
     return null;
   }
 
   try {
-    return await withAdminAccessToken(async (accessToken) => {
+    return await withCurrentSpotifyAccessToken(async (accessToken) => {
       const playback = await getPlaybackState(accessToken);
       if (!isPlayableTrack(playback?.item)) {
         return null;

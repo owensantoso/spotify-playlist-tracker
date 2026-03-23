@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 
-import { getAdminSession } from "@/lib/session";
+import { getAdminSession, getViewerSession } from "@/lib/session";
 
 export async function GET() {
-  const session = await getAdminSession();
+  const [adminSession, viewerSession] = await Promise.all([getAdminSession(), getViewerSession()]);
 
   return NextResponse.json(
-    { isAuthenticated: Boolean(session?.spotifyUserId) },
+    {
+      isAuthenticated: Boolean(viewerSession?.spotifyUserId || adminSession?.spotifyUserId),
+      isAdmin: Boolean(adminSession?.spotifyUserId),
+      spotifyUserId: viewerSession?.spotifyUserId ?? adminSession?.spotifyUserId ?? null,
+    },
     {
       headers: {
         "Cache-Control": "no-store",

@@ -43,11 +43,26 @@ model AdminAccount {
   updatedAt             DateTime @updatedAt
 }
 
+model UserAccount {
+  spotifyUserId         String      @id
+  displayName           String?
+  profileUrl            String?
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String
+  tokenExpiresAt        DateTime
+  grantedScopes         String[]
+  lastAuthenticatedAt   DateTime    @default(now())
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  spotifyUser           SpotifyUser @relation(fields: [spotifyUserId], references: [spotifyUserId], onDelete: Cascade)
+}
+
 model SpotifyUser {
   spotifyUserId   String           @id
   displayName     String?
   profileUrl      String?
   addedLifecycles TrackLifecycle[] @relation("LifecycleContributor")
+  userAccount     UserAccount?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 }

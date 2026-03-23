@@ -4,7 +4,6 @@ import { db } from "@/lib/db";
 import { decryptValue, encryptValue } from "@/lib/security";
 import { refreshAccessToken, SpotifyApiError } from "@/lib/spotify/client";
 import type { SpotifyUserProfile } from "@/lib/spotify/types";
-import { upsertUserAccount } from "@/lib/services/user-account-service";
 
 type StoredTokens = {
   accessToken: string;
@@ -12,26 +11,33 @@ type StoredTokens = {
   expiresAt: Date;
 };
 
-export async function upsertAdminAccount(params: {
+async function upsertSpotifyUserProfile(profile: SpotifyUserProfile) {
+  await db.spotifyUser.upsert({
+    where: { spotifyUserId: profile.id },
+    update: {
+      displayName: profile.display_name,
+      profileUrl: profile.external_urls?.spotify ?? null,
+    },
+    create: {
+      spotifyUserId: profile.id,
+      displayName: profile.display_name,
+      profileUrl: profile.external_urls?.spotify ?? null,
+    },
+  });
+}
+
+export async function upsertUserAccount(params: {
   profile: SpotifyUserProfile;
   accessToken: string;
   refreshToken: string;
   expiresInSeconds: number;
   scope: string;
 }) {
-  const existingAdmin = await db.adminAccount.findFirst({
-    orderBy: { createdAt: "asc" },
-  });
-
-  if (existingAdmin && existingAdmin.spotifyUserId !== params.profile.id) {
-    throw new Error("A different Spotify account is already configured as the admin");
-  }
+  await upsertSpotifyUserProfile(params.profile);
 
   const tokenExpiresAt = new Date(Date.now() + params.expiresInSeconds * 1000);
 
-  await upsertUserAccount(params);
-
-  return db.adminAccount.upsert({
+  return db.userAccount.upsert({
     where: { spotifyUserId: params.profile.id },
     update: {
       displayName: params.profile.display_name,
@@ -55,13 +61,13 @@ export async function upsertAdminAccount(params: {
   });
 }
 
-async function readStoredTokens() {
-  const account = await db.adminAccount.findFirst({
-    orderBy: { createdAt: "asc" },
+async function readStoredTokens(spotifyUserId: string) {
+  const account = await db.userAccount.findUnique({
+    where: { spotifyUserId },
   });
 
   if (!account) {
-    throw new Error("Admin account has not completed Spotify setup");
+    throw new Error("Spotify user account has not completed sign in");
   }
 
   return {
@@ -79,7 +85,7 @@ async function persistRefreshedTokens(
   tokens: StoredTokens,
   scope?: string,
 ) {
-  await db.adminAccount.update({
+  await db.userAccount.update({
     where: { spotifyUserId },
     data: {
       accessTokenEncrypted: encryptValue(tokens.accessToken),
@@ -90,8 +96,8 @@ async function persistRefreshedTokens(
   });
 }
 
-async function ensureFreshAccessToken() {
-  const { account, tokens } = await readStoredTokens();
+async function ensureFreshAccessToken(spotifyUserId: string) {
+  const { account, tokens } = await readStoredTokens(spotifyUserId);
   const expiresSoon = tokens.expiresAt.getTime() - Date.now() < 60_000;
 
   if (!expiresSoon) {
@@ -109,10 +115,11 @@ async function ensureFreshAccessToken() {
   return { account, accessToken: nextTokens.accessToken };
 }
 
-export async function withAdminAccessToken<T>(
+export async function withUserAccessToken<T>(
+  spotifyUserId: string,
   callback: (accessToken: string) => Promise<T>,
 ) {
-  const current = await ensureFreshAccessToken();
+  const current = await ensureFreshAccessToken(spotifyUserId);
 
   try {
     return await callback(current.accessToken);
@@ -121,7 +128,7 @@ export async function withAdminAccessToken<T>(
       throw error;
     }
 
-    const { account, tokens } = await readStoredTokens();
+    const { account, tokens } = await readStoredTokens(spotifyUserId);
     const refreshed = await refreshAccessToken(tokens.refreshToken);
     const nextTokens = {
       accessToken: refreshed.access_token,
@@ -134,8 +141,8 @@ export async function withAdminAccessToken<T>(
   }
 }
 
-export async function getAdminAccount() {
-  return db.adminAccount.findFirst({
-    orderBy: { createdAt: "asc" },
+export async function getUserAccount(spotifyUserId: string) {
+  return db.userAccount.findUnique({
+    where: { spotifyUserId },
   });
 }
