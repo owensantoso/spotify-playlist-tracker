@@ -113,8 +113,6 @@ export function SongTable({
         return acc;
       }, {}),
   );
-  const [reactionPendingTrackId, setReactionPendingTrackId] = useState<string | null>(null);
-  const [reactionErrorTrackId, setReactionErrorTrackId] = useState<string | null>(null);
   const [holdTrackId, setHoldTrackId] = useState<string | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressTriggeredRef = useRef(false);
@@ -211,12 +209,28 @@ export function SongTable({
   }
 
   async function handleReaction(row: SongTableRow, kind: SongReactionKind) {
-    if (!reactionsFeatureAvailable || reactionPendingTrackId) {
+    if (!reactionsFeatureAvailable) {
       return;
     }
 
-    setReactionPendingTrackId(row.spotifyTrackId);
-    setReactionErrorTrackId(null);
+    const previous = reactionState[row.spotifyTrackId] ?? {
+      score: row.likeScore ?? 0,
+      viewerReaction: row.viewerReaction ?? null,
+    };
+
+    const nextViewerReaction = previous.viewerReaction === kind ? null : kind;
+    const nextScore =
+      previous.score -
+      (previous.viewerReaction === "SUPERLIKE" ? 2 : previous.viewerReaction === "LIKE" ? 1 : 0) +
+      (nextViewerReaction === "SUPERLIKE" ? 2 : nextViewerReaction === "LIKE" ? 1 : 0);
+
+    setReactionState((current) => ({
+      ...current,
+      [row.spotifyTrackId]: {
+        score: nextScore,
+        viewerReaction: nextViewerReaction,
+      },
+    }));
 
     try {
       const response = await fetch("/api/reactions", {
@@ -234,30 +248,34 @@ export function SongTable({
       const payload = (await response.json().catch(() => null)) as
         | { error?: string; score?: number; viewerReaction?: SongReactionKind | null; code?: string }
         | null;
-      const nextScore = payload?.score;
-      const nextViewerReaction = payload?.viewerReaction ?? null;
+      const confirmedScore = payload?.score;
+      const confirmedViewerReaction = payload?.viewerReaction ?? null;
 
       if (response.status === 401) {
         window.location.href = `/api/auth/spotify/login?mode=viewer&next=${encodeURIComponent(pathname || "/active")}`;
         return;
       }
 
-      if (!response.ok || typeof nextScore !== "number") {
-        setReactionErrorTrackId(row.spotifyTrackId);
+      if (!response.ok || typeof confirmedScore !== "number") {
+        setReactionState((current) => ({
+          ...current,
+          [row.spotifyTrackId]: previous,
+        }));
         return;
       }
 
       setReactionState((current) => ({
         ...current,
         [row.spotifyTrackId]: {
-          score: nextScore,
-          viewerReaction: nextViewerReaction,
+          score: confirmedScore,
+          viewerReaction: confirmedViewerReaction,
         },
       }));
     } catch {
-      setReactionErrorTrackId(row.spotifyTrackId);
-    } finally {
-      setReactionPendingTrackId(null);
+      setReactionState((current) => ({
+        ...current,
+        [row.spotifyTrackId]: previous,
+      }));
     }
   }
 
@@ -302,7 +320,7 @@ export function SongTable({
       <p id="active-song-empty" className="hidden text-sm text-stone-400">
         No active songs match this view yet.
       </p>
-      <table className="min-w-full table-separate border-spacing-y-2 text-left text-[13px]">
+      <table className="min-w-full table-separate border-spacing-x-3 border-spacing-y-2 text-left text-[13px]">
         <colgroup>
           <col className="w-[11%]" />
           <col className="w-[92px]" />
@@ -397,7 +415,7 @@ export function SongTable({
                   className={cn(
                     "py-3 pr-4",
                     isNowPlaying
-                      ? "rounded-l-[1.35rem] border-y border-l border-[rgba(243,167,92,0.18)] bg-[linear-gradient(90deg,rgba(243,167,92,0.14),rgba(243,167,92,0.08))]"
+                      ? "rounded-l-[1.45rem] border border-[rgba(243,167,92,0.14)] bg-[linear-gradient(90deg,rgba(243,167,92,0.14),rgba(243,167,92,0.07))] pl-5"
                       : "border-y border-transparent group-hover/song:bg-white/[0.035]",
                   )}
                 >
@@ -409,9 +427,9 @@ export function SongTable({
                       onPointerLeave={clearLongPress}
                       onPointerCancel={clearLongPress}
                       onClick={(event) => event.preventDefault()}
-                      disabled={reactionPendingTrackId === row.spotifyTrackId || !reactionsFeatureAvailable}
+                      disabled={!reactionsFeatureAvailable}
                       className={cn(
-                        "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition duration-200 disabled:cursor-progress disabled:opacity-60",
+                        "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition duration-200 disabled:opacity-60",
                         isSuperLiked
                           ? "border-[--color-accent] bg-[--color-accent]/18 text-[--color-accent]"
                           : isLiked
@@ -422,9 +440,7 @@ export function SongTable({
                       aria-label={isHolding ? `Super-like ${row.title}` : `Like ${row.title}`}
                       title="Tap for like, hold for super-like"
                     >
-                      {reactionPendingTrackId === row.spotifyTrackId ? (
-                        <LoaderCircle className="h-4 w-4 animate-spin" />
-                      ) : isSuperLiked || isHolding ? (
+                      {isSuperLiked || isHolding ? (
                         <Sparkles className={cn("h-4 w-4", isHolding && "rotate-6")} />
                       ) : (
                         <Heart className={cn("h-4 w-4", isLiked && "fill-current")} />
@@ -437,17 +453,12 @@ export function SongTable({
                       </p>
                     </div>
                   </div>
-                  {reactionErrorTrackId === row.spotifyTrackId ? (
-                    <p className="mt-1 text-[11px] text-rose-300">
-                      Could not save your like.
-                    </p>
-                  ) : null}
                 </td>
                 <td
                   className={cn(
                     "py-3 pr-4",
                     isNowPlaying
-                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
+                      ? "border-y border-[rgba(243,167,92,0.14)] bg-[rgba(243,167,92,0.055)]"
                       : "border-y border-transparent group-hover/song:bg-white/[0.035]",
                   )}
                 >
@@ -506,17 +517,21 @@ export function SongTable({
                   className={cn(
                     "relative py-3 pr-4 font-medium text-stone-100",
                     isNowPlaying
-                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
+                      ? "border-y border-[rgba(243,167,92,0.14)] bg-[rgba(243,167,92,0.055)]"
                       : "border-y border-transparent group-hover/song:bg-white/[0.035]",
                   )}
                 >
                   {isNowPlaying ? (
-                    <p className="mb-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[--color-accent]">
-                      Playing now
-                    </p>
-                  ) : null}
-                  {isNowPlaying ? (
-                    <div className="absolute inset-y-3 left-0 w-px bg-[linear-gradient(180deg,transparent,rgba(243,167,92,0.85),transparent)]" aria-hidden="true" />
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className="inline-flex h-3 items-end gap-[2px]" aria-hidden="true">
+                        <span className="fotm-eq-bar h-[6px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "0ms" }} />
+                        <span className="fotm-eq-bar h-[10px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "140ms" }} />
+                        <span className="fotm-eq-bar h-[7px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "280ms" }} />
+                      </span>
+                      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-[--color-accent]">
+                        Playing now
+                      </p>
+                    </div>
                   ) : null}
                   {row.titleRomanized ? (
                     <p className="mb-0.5 truncate font-mono text-[8px] font-normal uppercase leading-[1.15] tracking-[0.04em] text-stone-300">
@@ -536,7 +551,7 @@ export function SongTable({
                   className={cn(
                     "py-3 pr-4",
                     isNowPlaying
-                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
+                      ? "border-y border-[rgba(243,167,92,0.14)] bg-[rgba(243,167,92,0.055)]"
                       : "border-y border-transparent group-hover/song:bg-white/[0.035]",
                   )}
                 >
@@ -565,7 +580,7 @@ export function SongTable({
                   className={cn(
                     "py-3 pr-4",
                     isNowPlaying
-                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
+                      ? "border-y border-[rgba(243,167,92,0.14)] bg-[rgba(243,167,92,0.055)]"
                       : "border-y border-transparent group-hover/song:bg-white/[0.035]",
                   )}
                 >
@@ -583,7 +598,7 @@ export function SongTable({
                   className={cn(
                     "py-3 pr-4",
                     isNowPlaying
-                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
+                      ? "border-y border-[rgba(243,167,92,0.14)] bg-[rgba(243,167,92,0.055)]"
                       : "border-y border-transparent group-hover/song:bg-white/[0.035]",
                   )}
                 >
@@ -593,7 +608,7 @@ export function SongTable({
                   className={cn(
                     "py-3 pr-4 text-stone-300",
                     isNowPlaying
-                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
+                      ? "border-y border-[rgba(243,167,92,0.14)] bg-[rgba(243,167,92,0.055)]"
                       : "border-y border-transparent group-hover/song:bg-white/[0.035]",
                   )}
                 >
@@ -613,7 +628,7 @@ export function SongTable({
                   className={cn(
                     "py-3 text-right",
                     isNowPlaying
-                      ? "rounded-r-[1.35rem] border-y border-r border-[rgba(243,167,92,0.18)] bg-[linear-gradient(90deg,rgba(243,167,92,0.06),rgba(106,161,109,0.12))]"
+                      ? "rounded-r-[1.45rem] border border-[rgba(243,167,92,0.14)] bg-[linear-gradient(90deg,rgba(243,167,92,0.055),rgba(106,161,109,0.12))] pr-5"
                       : "border-y border-transparent group-hover/song:bg-white/[0.035]",
                   )}
                 >
