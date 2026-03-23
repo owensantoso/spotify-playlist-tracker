@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { NowPlayingComments } from "@/components/now-playing-comments";
+import { SongToolsMenu } from "@/components/song-tools-menu";
 import type { CommentTrackPayload } from "@/lib/services/comment-service";
 import type { NowPlayingTrack } from "@/lib/services/now-playing-service";
 import { cn } from "@/lib/utils";
@@ -417,7 +418,14 @@ export function Navigation({
                     Idle
                   </div>
                 )}
-                <div className="min-w-0">
+                <div className="min-w-0 group/song-tools relative pr-12">
+                  {nowPlaying ? (
+                    <SongToolsMenu
+                      title={nowPlaying.title}
+                      artists={nowPlaying.artists}
+                      panelClassName="top-full"
+                    />
+                  ) : null}
                   <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[--color-accent]">
                     {nowPlaying ? (nowPlaying.isPlaying ? "Now playing" : "Paused") : "Now playing"}
                   </p>

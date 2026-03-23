@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
+import { SongToolsMenu } from "@/components/song-tools-menu";
 import { SpotifyUserLink } from "@/components/spotify-user-link";
 import type { ActiveSongsSortBy, SortDirection } from "@/lib/services/stats-service";
 import { cn, compactSearchText, formatRelativeDuration, getPlaylistStartDate, normalizeSearchText } from "@/lib/utils";
@@ -525,26 +526,29 @@ export function SongTable({
                     centerCellClass,
                   )}
                 >
-                  {isNowPlaying ? (
-                    <div className="mb-1 flex items-center gap-2">
-                      <span className="inline-flex h-3 items-end gap-[2px]" aria-hidden="true">
-                        <span className="fotm-eq-bar h-[6px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "0ms" }} />
-                        <span className="fotm-eq-bar h-[10px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "140ms" }} />
-                        <span className="fotm-eq-bar h-[7px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "280ms" }} />
-                      </span>
-                      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-[--color-accent]">
-                        Playing now
+                  <div className="group/song-tools relative pr-12">
+                    <SongToolsMenu title={row.title} artists={row.artists} />
+                    {isNowPlaying ? (
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className="inline-flex h-3 items-end gap-[2px]" aria-hidden="true">
+                          <span className="fotm-eq-bar h-[6px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "0ms" }} />
+                          <span className="fotm-eq-bar h-[10px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "140ms" }} />
+                          <span className="fotm-eq-bar h-[7px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "280ms" }} />
+                        </span>
+                        <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-[--color-accent]">
+                          Playing now
+                        </p>
+                      </div>
+                    ) : null}
+                    {row.titleRomanized ? (
+                      <p className="mb-0.5 truncate font-mono text-[8px] font-normal uppercase leading-[1.15] tracking-[0.04em] text-stone-300">
+                        {row.titleRomanized}
                       </p>
-                    </div>
-                  ) : null}
-                  {row.titleRomanized ? (
-                    <p className="mb-0.5 truncate font-mono text-[8px] font-normal uppercase leading-[1.15] tracking-[0.04em] text-stone-300">
-                      {row.titleRomanized}
+                    ) : null}
+                    <p className="min-w-0 truncate transition group-hover/song:text-white">
+                      {row.title}
                     </p>
-                  ) : null}
-                  <p className="min-w-0 truncate transition group-hover/song:text-white">
-                    {row.title}
-                  </p>
+                  </div>
                   {playErrorTrackId === row.spotifyTrackId ? (
                     <p className="mt-1 text-[11px] text-rose-300">
                       Could not start playback. Open Spotify on an active device first.
