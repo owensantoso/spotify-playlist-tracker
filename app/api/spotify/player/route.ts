@@ -33,9 +33,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
-  try {
-    let refreshedViewerSession: ViewerSessionInput | null = null;
+  let refreshedViewerSession: ViewerSessionInput | null = null;
 
+  try {
     await withCurrentSpotifyAccessToken(async (accessToken, _auth, refreshedSession) => {
       refreshedViewerSession = refreshedSession;
       if (body.action === "play") {

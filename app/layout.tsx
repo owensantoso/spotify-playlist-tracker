@@ -6,6 +6,8 @@ import { getNowPlayingTrack } from "@/lib/services/now-playing-service";
 import { getMainPlaylistHeader } from "@/lib/services/stats-service";
 import "./globals.css";
 
+export const dynamic = "force-dynamic";
+
 const displayFont = Space_Grotesk({
   variable: "--font-space-grotesk",
   subsets: ["latin"],
