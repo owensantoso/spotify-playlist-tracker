@@ -1,11 +1,17 @@
+import { SpotifyUserLink } from "@/components/spotify-user-link";
 import { SectionCard } from "@/components/section-card";
+import { getSpotifyUserAvatarMap } from "@/lib/services/spotify-user-service";
 import { getContributorLeaderboard, getLongestLastingSongs } from "@/lib/services/stats-service";
-import { formatLifetimeMs, getSpotifyUserUrl } from "@/lib/utils";
+import { formatLifetimeMs } from "@/lib/utils";
 
 export default async function ContributorsPage() {
   const [contributors, longestLasting] = await Promise.all([
     getContributorLeaderboard(),
     getLongestLastingSongs(10),
+  ]);
+  const contributorAvatars = await getSpotifyUserAvatarMap([
+    ...contributors.map((contributor) => contributor.spotifyUserId),
+    ...longestLasting.map(({ lifecycle }) => lifecycle.addedBySpotifyUserId),
   ]);
 
   return (
@@ -28,18 +34,14 @@ export default async function ContributorsPage() {
                 {contributors.map((contributor) => (
                   <tr key={contributor.spotifyUserId}>
                     <td className="py-4 pr-4">
-                      {contributor.profileUrl ? (
-                        <a
-                          href={contributor.profileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="font-medium text-stone-100 hover:text-[--color-accent]"
-                        >
-                          {contributor.displayName}
-                        </a>
-                      ) : (
-                        contributor.displayName
-                      )}
+                      <SpotifyUserLink
+                        name={contributor.displayName}
+                        spotifyUserId={contributor.spotifyUserId}
+                        profileUrl={contributor.profileUrl}
+                        imageUrl={contributorAvatars[contributor.spotifyUserId] ?? null}
+                        sizeClassName="h-8 w-8"
+                        textClassName="font-medium text-stone-100"
+                      />
                     </td>
                     <td className="py-4 pr-4">{contributor.totalSongs}</td>
                     <td className="py-4 pr-4">{contributor.activeSongs}</td>
@@ -91,21 +93,20 @@ export default async function ContributorsPage() {
               </p>
               <p className="text-xs text-stone-500">
                 {lifecycle.addedBy?.displayName || lifecycle.addedBySpotifyUserId ? (
-                  <>
-                    Added by{" "}
-                    {getSpotifyUserUrl(lifecycle.addedBySpotifyUserId, lifecycle.addedBy?.profileUrl) ? (
-                      <a
-                        href={getSpotifyUserUrl(lifecycle.addedBySpotifyUserId, lifecycle.addedBy?.profileUrl)!}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="transition hover:text-[--color-accent]"
-                      >
-                        {lifecycle.addedBy?.displayName ?? lifecycle.addedBySpotifyUserId}
-                      </a>
-                    ) : (
-                      lifecycle.addedBy?.displayName ?? lifecycle.addedBySpotifyUserId
-                    )}
-                  </>
+                  <span className="inline-flex items-center gap-2">
+                    <span>Added by</span>
+                    <SpotifyUserLink
+                      name={lifecycle.addedBy?.displayName ?? lifecycle.addedBySpotifyUserId}
+                      spotifyUserId={lifecycle.addedBySpotifyUserId}
+                      profileUrl={lifecycle.addedBy?.profileUrl ?? null}
+                      imageUrl={
+                        lifecycle.addedBySpotifyUserId
+                          ? contributorAvatars[lifecycle.addedBySpotifyUserId] ?? null
+                          : null
+                      }
+                      sizeClassName="h-6 w-6"
+                    />
+                  </span>
                 ) : (
                   "Contributor unknown"
                 )}

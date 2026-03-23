@@ -1,9 +1,14 @@
 import { SectionCard } from "@/components/section-card";
 import { SongRowList } from "@/components/song-row-list";
+import { getSpotifyUserAvatarMap } from "@/lib/services/spotify-user-service";
 import { getRecentHistory } from "@/lib/services/stats-service";
 
 export default async function HistoryPage() {
   const history = await getRecentHistory(20);
+  const contributorAvatars = await getSpotifyUserAvatarMap([
+    ...history.recentAdditions.map((item) => item.addedBySpotifyUserId),
+    ...history.recentRemovals.map((item) => item.addedBySpotifyUserId),
+  ]);
 
   return (
     <div className="mx-auto grid w-full max-w-7xl gap-6 px-5 py-8 xl:grid-cols-2">
@@ -22,6 +27,7 @@ export default async function HistoryPage() {
             contributor: item.addedBy?.displayName ?? item.addedBySpotifyUserId ?? null,
             contributorSpotifyUserId: item.addedBySpotifyUserId,
             contributorProfileUrl: item.addedBy?.profileUrl ?? null,
+            contributorImageUrl: item.addedBySpotifyUserId ? contributorAvatars[item.addedBySpotifyUserId] ?? null : null,
             addedAt: item.spotifyAddedAt,
             firstSeenAt: item.firstSeenAt,
           }))}
@@ -44,6 +50,7 @@ export default async function HistoryPage() {
             contributor: item.addedBy?.displayName ?? item.addedBySpotifyUserId ?? null,
             contributorSpotifyUserId: item.addedBySpotifyUserId,
             contributorProfileUrl: item.addedBy?.profileUrl ?? null,
+            contributorImageUrl: item.addedBySpotifyUserId ? contributorAvatars[item.addedBySpotifyUserId] ?? null : null,
             addedAt: item.spotifyAddedAt,
             firstSeenAt: item.firstSeenAt,
             removedObservedAt: item.removedObservedAt,

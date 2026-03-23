@@ -6,6 +6,9 @@ export type SpotifyUserProfile = {
   id: string;
   display_name: string | null;
   external_urls?: SpotifyExternalUrls;
+  images?: Array<{
+    url: string;
+  }>;
 };
 
 export type SpotifyPlaylistOwner = {

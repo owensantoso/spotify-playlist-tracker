@@ -25,7 +25,7 @@ export class SpotifyApiError extends Error {
   }
 }
 
-async function spotifyRequest<T>(
+export async function spotifyRequest<T>(
   path: string,
   accessToken: string,
   init?: RequestInit,

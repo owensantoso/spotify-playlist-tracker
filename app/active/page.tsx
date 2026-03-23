@@ -2,6 +2,7 @@ import { ActiveSongsSearchController } from "@/components/active-songs-search-co
 import { SongTable } from "@/components/song-table";
 import { SectionCard } from "@/components/section-card";
 import { getNowPlayingTrack } from "@/lib/services/now-playing-service";
+import { getSpotifyUserAvatarMap } from "@/lib/services/spotify-user-service";
 import { type ActiveSongsSortBy, type SortDirection, getActiveSongs } from "@/lib/services/stats-service";
 
 type ActiveSongsPageProps = {
@@ -23,6 +24,7 @@ export default async function ActiveSongsPage({ searchParams }: ActiveSongsPageP
     }),
     getNowPlayingTrack(),
   ]);
+  const contributorAvatars = await getSpotifyUserAvatarMap(rows.map((row) => row.addedBySpotifyUserId));
 
   return (
     <div className="mx-auto w-full max-w-7xl px-5 py-8">
@@ -50,6 +52,7 @@ export default async function ActiveSongsPage({ searchParams }: ActiveSongsPageP
             contributor: row.addedBy?.displayName ?? row.addedBySpotifyUserId ?? null,
             contributorSpotifyUserId: row.addedBySpotifyUserId,
             contributorProfileUrl: row.addedBy?.profileUrl ?? null,
+            contributorImageUrl: row.addedBySpotifyUserId ? contributorAvatars[row.addedBySpotifyUserId] ?? null : null,
             addedAt: row.spotifyAddedAt,
             firstSeenAt: row.firstSeenAt,
             spotifyUrl: row.track.spotifyUrl,

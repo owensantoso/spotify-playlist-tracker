@@ -59,6 +59,11 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
         </div>
         {params.connected ? <p className="mt-4 text-sm text-emerald-300">Spotify account connected successfully.</p> : null}
         {params.seeded ? <p className="mt-4 text-sm text-emerald-300">Seeded {params.seeded} archive tracks into local dedupe state.</p> : null}
+        {params.reparsed ? (
+          <p className="mt-4 text-sm text-emerald-300">
+            Re-parsed romanization for {String(params.reparsed)} stored songs.
+          </p>
+        ) : null}
         {params.sync === "ok" ? (
           <p className="mt-4 text-sm text-emerald-300">
             Sync complete: {String(params.additions ?? 0)} additions, {String(params.removals ?? 0)} removals.
@@ -105,6 +110,20 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
             className="cursor-pointer rounded-full border border-white/15 px-4 py-2 text-sm text-stone-200 transition hover:border-[--color-accent] hover:text-white"
           >
             Seed archive entries
+          </button>
+        </form>
+      </SectionCard>
+
+      <SectionCard title="Song text refresh" eyebrow="Rebuild romanization">
+        <p className="text-sm text-stone-300">
+          Re-run the current romanization logic across every stored track. Use this after changing pinyin or Japanese/Korean transliteration rules so existing songs pick up the new text.
+        </p>
+        <form action="/api/admin/reparse-romanization?redirect=1" method="post" className="mt-4">
+          <button
+            type="submit"
+            className="cursor-pointer rounded-full border border-white/15 px-4 py-2 text-sm text-stone-200 transition hover:border-[--color-accent] hover:text-white"
+          >
+            Re-parse all songs in database
           </button>
         </form>
       </SectionCard>

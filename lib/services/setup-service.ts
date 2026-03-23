@@ -3,7 +3,7 @@ import "server-only";
 import { PlaylistKind, PrismaClient } from "@prisma/client";
 
 import { db } from "@/lib/db";
-import { addRomanizationToNormalizedTracks } from "@/lib/romanization";
+import { addRomanizationToNormalizedTracks, romanizeText } from "@/lib/romanization";
 import { getPlaylist, getAllPlaylistItems } from "@/lib/spotify/client";
 import { normalizePlaylistItems } from "@/lib/spotify/normalize";
 import { getAdminAccount, withAdminAccessToken } from "@/lib/services/admin-service";
@@ -150,4 +150,33 @@ export async function seedArchiveEntriesFromRemoteArchive() {
 
     return normalized.length;
   });
+}
+
+export async function reparseTrackRomanization() {
+  const tracks = await db.track.findMany({
+    select: {
+      spotifyTrackId: true,
+      name: true,
+      artistNames: true,
+    },
+  });
+
+  await Promise.all(
+    tracks.map(async (track) => {
+      const [nameRomanized, artistNamesRomanized] = await Promise.all([
+        romanizeText(track.name),
+        Promise.all(track.artistNames.map(async (artist) => (await romanizeText(artist)) ?? artist)),
+      ]);
+
+      await db.track.update({
+        where: { spotifyTrackId: track.spotifyTrackId },
+        data: {
+          nameRomanized,
+          artistNamesRomanized,
+        },
+      });
+    }),
+  );
+
+  return tracks.length;
 }

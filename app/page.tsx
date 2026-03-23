@@ -5,6 +5,7 @@ import { SectionCard } from "@/components/section-card";
 import { SongRowList } from "@/components/song-row-list";
 import { StatCard } from "@/components/stat-card";
 import { getNowPlayingTrack } from "@/lib/services/now-playing-service";
+import { getSpotifyUserAvatarMap } from "@/lib/services/spotify-user-service";
 import { getContributorLeaderboard, getDashboardCharts, getLengthStats, getLongestLastingSongs, getOverviewStats, getRecentHistory } from "@/lib/services/stats-service";
 import { formatLifetimeMs } from "@/lib/utils";
 
@@ -17,6 +18,10 @@ export default async function HomePage() {
     getDashboardCharts(),
     getLengthStats(6),
     getNowPlayingTrack(),
+  ]);
+  const contributorAvatars = await getSpotifyUserAvatarMap([
+    ...history.recentAdditions.map((item) => item.addedBySpotifyUserId),
+    ...history.recentRemovals.map((item) => item.addedBySpotifyUserId),
   ]);
 
   if (!overview.publicDashboard) {
@@ -214,6 +219,7 @@ export default async function HomePage() {
               contributor: item.addedBy?.displayName ?? item.addedBySpotifyUserId ?? null,
               contributorSpotifyUserId: item.addedBySpotifyUserId,
               contributorProfileUrl: item.addedBy?.profileUrl ?? null,
+              contributorImageUrl: item.addedBySpotifyUserId ? contributorAvatars[item.addedBySpotifyUserId] ?? null : null,
               addedAt: item.spotifyAddedAt,
               firstSeenAt: item.firstSeenAt,
             }))}
@@ -237,6 +243,7 @@ export default async function HomePage() {
               contributor: item.addedBy?.displayName ?? item.addedBySpotifyUserId ?? null,
               contributorSpotifyUserId: item.addedBySpotifyUserId,
               contributorProfileUrl: item.addedBy?.profileUrl ?? null,
+              contributorImageUrl: item.addedBySpotifyUserId ? contributorAvatars[item.addedBySpotifyUserId] ?? null : null,
               addedAt: item.spotifyAddedAt,
               firstSeenAt: item.firstSeenAt,
               removedObservedAt: item.removedObservedAt,

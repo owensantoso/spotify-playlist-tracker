@@ -3,8 +3,9 @@
 import { format } from "date-fns";
 import Link from "next/link";
 
+import { SpotifyUserLink } from "@/components/spotify-user-link";
 import type { ActiveSongsSortBy, SortDirection } from "@/lib/services/stats-service";
-import { cn, formatRelativeDuration, getPlaylistStartDate, getSpotifyUserUrl } from "@/lib/utils";
+import { cn, formatRelativeDuration, getPlaylistStartDate } from "@/lib/utils";
 
 type SongTableRow = {
   id: string;
@@ -18,6 +19,7 @@ type SongTableRow = {
   contributor: string | null;
   contributorSpotifyUserId?: string | null;
   contributorProfileUrl?: string | null;
+  contributorImageUrl?: string | null;
   addedAt: Date | null;
   firstSeenAt: Date;
   spotifyUrl: string;
@@ -144,7 +146,6 @@ export function SongTable({
         </thead>
         <tbody id="active-song-body" className="divide-y divide-white/6 text-stone-200">
           {rows.map((row) => {
-            const contributorUrl = getSpotifyUserUrl(row.contributorSpotifyUserId, row.contributorProfileUrl);
             const searchValue = `${row.title} ${row.titleRomanized ?? ""} ${row.artists.join(" ")} ${(row.artistsRomanized ?? []).join(" ")}`.toLocaleLowerCase();
             const isNowPlaying = nowPlayingTrackId === row.spotifyTrackId;
 
@@ -219,22 +220,15 @@ export function SongTable({
                   </div>
                 </td>
                 <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
-                  {row.contributor ? (
-                    contributorUrl ? (
-                      <a
-                        href={contributorUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="transition hover:text-[--color-accent]"
-                      >
-                        {row.contributor}
-                      </a>
-                    ) : (
-                      row.contributor
-                    )
-                  ) : (
-                    "Unknown"
-                  )}
+                  <SpotifyUserLink
+                    name={row.contributor}
+                    spotifyUserId={row.contributorSpotifyUserId}
+                    profileUrl={row.contributorProfileUrl}
+                    imageUrl={row.contributorImageUrl}
+                    fallbackLabel="Unknown"
+                    sizeClassName="h-7 w-7"
+                    textClassName="truncate"
+                  />
                 </td>
                 <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
                   {row.addedAt ? format(row.addedAt, "MMM d, yyyy") : "Unknown"}

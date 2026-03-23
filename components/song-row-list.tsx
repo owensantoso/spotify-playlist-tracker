@@ -2,7 +2,8 @@
 
 import { format } from "date-fns";
 
-import { cn, formatLifetimeMs, formatRelativeDuration, getPlaylistStartDate, getSpotifyUserUrl } from "@/lib/utils";
+import { SpotifyUserLink } from "@/components/spotify-user-link";
+import { cn, formatLifetimeMs, formatRelativeDuration, getPlaylistStartDate } from "@/lib/utils";
 
 type SongListItem = {
   id: string;
@@ -17,6 +18,7 @@ type SongListItem = {
   contributor: string | null;
   contributorSpotifyUserId?: string | null;
   contributorProfileUrl?: string | null;
+  contributorImageUrl?: string | null;
   addedAt: Date | null;
   firstSeenAt: Date;
   removedObservedAt?: Date | null;
@@ -110,22 +112,17 @@ export function SongRowList({
                   ))}
                 </p>
                 <p className="text-xs text-stone-500">
-                  {item.contributor ? (
-                    <>
-                      Added by{" "}
-                      {getSpotifyUserUrl(item.contributorSpotifyUserId, item.contributorProfileUrl) ? (
-                        <a
-                          href={getSpotifyUserUrl(item.contributorSpotifyUserId, item.contributorProfileUrl)!}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="transition hover:text-[--color-accent]"
-                        >
-                          {item.contributor}
-                        </a>
-                      ) : (
-                        item.contributor
-                      )}
-                    </>
+                  {item.contributor || item.contributorSpotifyUserId ? (
+                    <span className="inline-flex items-center gap-2">
+                      <span>Added by</span>
+                      <SpotifyUserLink
+                        name={item.contributor}
+                        spotifyUserId={item.contributorSpotifyUserId}
+                        profileUrl={item.contributorProfileUrl}
+                        imageUrl={item.contributorImageUrl}
+                        sizeClassName="h-6 w-6"
+                      />
+                    </span>
                   ) : (
                     "Contributor unknown"
                   )}
