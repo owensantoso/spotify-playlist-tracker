@@ -11,6 +11,7 @@ import {
 } from "date-fns";
 
 import { cacheTags } from "@/lib/cache-tags";
+import { isDatabaseUnavailableError } from "@/lib/prisma-errors";
 import { db } from "@/lib/db";
 import { getCachedSettings } from "@/lib/services/settings-service";
 import { formatLifetimeMs, getPlaylistStartDate } from "@/lib/utils";
@@ -169,7 +170,23 @@ const getOverviewStatsCached = unstable_cache(readOverviewStats, ["overview-stat
 });
 
 export async function getOverviewStats() {
-  return getOverviewStatsCached();
+  try {
+    return await getOverviewStatsCached();
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return {
+        publicDashboard: true,
+        syncIntervalMinutes: 60,
+        activeSongsCount: 0,
+        totalUniqueSongs: 0,
+        contributorsCount: 0,
+        latestSync: null,
+        medianLifetimeLabel: "n/a",
+      };
+    }
+
+    throw error;
+  }
 }
 
 async function readLengthStats(limit = 6): Promise<LengthStats> {
@@ -227,7 +244,20 @@ const getLengthStatsCached = unstable_cache(readLengthStats, ["length-stats"], {
 });
 
 export async function getLengthStats(limit = 6): Promise<LengthStats> {
-  return getLengthStatsCached(limit);
+  try {
+    return await getLengthStatsCached(limit);
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return {
+        averageSongLengthLabel: "n/a",
+        currentPlaylistLengthLabel: "n/a",
+        shortestActiveTracks: [],
+        longestActiveTracks: [],
+      };
+    }
+
+    throw error;
+  }
 }
 
 async function readMainPlaylistHeader() {
@@ -255,7 +285,18 @@ const getMainPlaylistHeaderCached = unstable_cache(readMainPlaylistHeader, ["app
 });
 
 export async function getMainPlaylistHeader() {
-  return getMainPlaylistHeaderCached();
+  try {
+    return await getMainPlaylistHeaderCached();
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return {
+        name: "Flavor of the Moment",
+        spotifyUrl: null,
+      };
+    }
+
+    throw error;
+  }
 }
 
 function compareText(left: string, right: string, direction: SortDirection) {
@@ -349,7 +390,15 @@ export async function getActiveSongs(options: {
   sortBy?: ActiveSongsSortBy;
   sortDirection?: SortDirection;
 } = {}) {
-  return getActiveSongsCached(options);
+  try {
+    return await getActiveSongsCached(options);
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
 }
 
 async function readRecentHistory(limit = 12) {
@@ -390,7 +439,18 @@ const getRecentHistoryCached = unstable_cache(readRecentHistory, ["recent-histor
 });
 
 export async function getRecentHistory(limit = 12) {
-  return getRecentHistoryCached(limit);
+  try {
+    return await getRecentHistoryCached(limit);
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return {
+        recentAdditions: [],
+        recentRemovals: [],
+      };
+    }
+
+    throw error;
+  }
 }
 
 async function readContributorLeaderboard() {
@@ -471,7 +531,15 @@ const getContributorLeaderboardCached = unstable_cache(
 );
 
 export async function getContributorLeaderboard() {
-  return getContributorLeaderboardCached();
+  try {
+    return await getContributorLeaderboardCached();
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
 }
 
 async function readLongestLastingSongs(limit = 10) {
@@ -505,7 +573,15 @@ const getLongestLastingSongsCached = unstable_cache(
 );
 
 export async function getLongestLastingSongs(limit = 10) {
-  return getLongestLastingSongsCached(limit);
+  try {
+    return await getLongestLastingSongsCached(limit);
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
 }
 
 async function readSyncRuns(limit = 25) {
@@ -521,7 +597,15 @@ const getSyncRunsCached = unstable_cache(readSyncRuns, ["sync-runs"], {
 });
 
 export async function getSyncRuns(limit = 25) {
-  return getSyncRunsCached(limit);
+  try {
+    return await getSyncRunsCached(limit);
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
 }
 
 async function readDashboardCharts(): Promise<DashboardCharts> {
@@ -702,5 +786,19 @@ const getDashboardChartsCached = unstable_cache(readDashboardCharts, ["dashboard
 });
 
 export async function getDashboardCharts(): Promise<DashboardCharts> {
-  return getDashboardChartsCached();
+  try {
+    return await getDashboardChartsCached();
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return {
+        activeSongsOverTime: [],
+        archiveGrowthOverTime: [],
+        contributorShareOverTime: [],
+        additionsHeatmap: [],
+        removalAgeHistogram: [],
+      };
+    }
+
+    throw error;
+  }
 }

@@ -226,28 +226,62 @@ export function SongTable({
                 data-song-row="true"
                 data-search={searchValue}
                 className={cn(
-                  "transition-colors duration-200",
+                  "group/song transition-all duration-200 hover:bg-white/[0.035]",
                   isNowPlaying &&
                     "bg-[linear-gradient(90deg,rgba(243,167,92,0.14),rgba(243,167,92,0.06),rgba(106,161,109,0.12))] shadow-[inset_0_0_0_1px_rgba(243,167,92,0.18)]",
                 )}
               >
                 <td className="py-3 pr-4">
-                  <a href={row.spotifyUrl} target="_blank" rel="noreferrer" className="block w-fit">
+                  <div className="relative w-fit">
                     {row.artworkUrl ? (
-                      <img
-                        src={row.artworkUrl}
-                        alt=""
-                        className={cn(
-                          "h-10 w-10 rounded-xl object-cover",
-                          isNowPlaying && "ring-2 ring-[--color-accent]/85 ring-offset-2 ring-offset-[--color-ink] shadow-[0_0_24px_rgba(243,167,92,0.18)]",
-                        )}
-                      />
+                      <>
+                        <img
+                          src={row.artworkUrl}
+                          alt=""
+                          className={cn(
+                            "h-10 w-10 rounded-xl object-cover transition duration-200 group-hover/song:brightness-[0.42]",
+                            isNowPlaying && "ring-2 ring-[--color-accent]/85 ring-offset-2 ring-offset-[--color-ink] shadow-[0_0_24px_rgba(243,167,92,0.18)]",
+                          )}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void handlePlayTrack(row)}
+                          disabled={playPendingTrackId === row.spotifyTrackId}
+                          className="absolute inset-0 inline-flex items-center justify-center rounded-xl bg-black/0 text-white opacity-0 transition duration-200 hover:bg-black/8 focus-visible:opacity-100 focus-visible:outline-none group-hover/song:opacity-100 disabled:cursor-progress"
+                          aria-label={`Play ${row.title}`}
+                        >
+                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-black/55 backdrop-blur-sm">
+                            {playPendingTrackId === row.spotifyTrackId ? (
+                              <LoaderCircle className="h-4 w-4 animate-spin text-[--color-accent]" />
+                            ) : (
+                              <Play className="h-4 w-4 fill-current text-white" />
+                            )}
+                          </span>
+                        </button>
+                      </>
                     ) : (
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/6 text-[10px] text-stone-500">
-                        n/a
-                      </div>
+                      <>
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/6 text-[10px] text-stone-500 transition duration-200 group-hover/song:bg-white/10">
+                          n/a
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handlePlayTrack(row)}
+                          disabled={playPendingTrackId === row.spotifyTrackId}
+                          className="absolute inset-0 inline-flex items-center justify-center rounded-xl bg-black/0 text-white opacity-0 transition duration-200 hover:bg-black/8 focus-visible:opacity-100 focus-visible:outline-none group-hover/song:opacity-100 disabled:cursor-progress"
+                          aria-label={`Play ${row.title}`}
+                        >
+                          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-black/55 backdrop-blur-sm">
+                            {playPendingTrackId === row.spotifyTrackId ? (
+                              <LoaderCircle className="h-4 w-4 animate-spin text-[--color-accent]" />
+                            ) : (
+                              <Play className="h-4 w-4 fill-current text-white" />
+                            )}
+                          </span>
+                        </button>
+                      </>
                     )}
-                  </a>
+                  </div>
                 </td>
                 <td className="relative py-3 pr-4 font-medium text-stone-100">
                   {isNowPlaying ? (
@@ -264,21 +298,9 @@ export function SongTable({
                     </p>
                   ) : null}
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handlePlayTrack(row)}
-                      disabled={playPendingTrackId === row.spotifyTrackId}
-                      className="min-w-0 text-left transition hover:text-[--color-accent] disabled:cursor-progress disabled:opacity-70"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        {playPendingTrackId === row.spotifyTrackId ? (
-                          <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin text-[--color-accent]" />
-                        ) : (
-                          <Play className="h-3.5 w-3.5 shrink-0 text-[--color-accent]" />
-                        )}
-                        <span className="truncate">{row.title}</span>
-                      </span>
-                    </button>
+                    <p className="min-w-0 truncate transition group-hover/song:text-white">
+                      {row.title}
+                    </p>
                     <a
                       href={row.spotifyUrl}
                       target="_blank"

@@ -5,6 +5,7 @@ import { unstable_cache } from "next/cache";
 import { cacheTags } from "@/lib/cache-tags";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { isDatabaseUnavailableError } from "@/lib/prisma-errors";
 
 const readAppSettingsCached = unstable_cache(
   async () => db.appSettings.findUnique({ where: { id: 1 } }),
@@ -16,7 +17,15 @@ const readAppSettingsCached = unstable_cache(
 );
 
 export async function getCachedSettings() {
-  return readAppSettingsCached();
+  try {
+    return await readAppSettingsCached();
+  } catch (error) {
+    if (isDatabaseUnavailableError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
 }
 
 export async function getOrCreateSettings() {

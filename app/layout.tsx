@@ -3,6 +3,7 @@ import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 
 import { Navigation } from "@/components/navigation";
 import { getCommentTrackPayload } from "@/lib/services/comment-service";
+import type { CommentTrackPayload } from "@/lib/services/comment-service";
 import { getNowPlayingTrack } from "@/lib/services/now-playing-service";
 import { getMainPlaylistHeader } from "@/lib/services/stats-service";
 import "./globals.css";
@@ -30,18 +31,26 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [playlistHeader, nowPlaying] = await Promise.all([
-    getMainPlaylistHeader(),
-    getNowPlayingTrack(),
-  ]);
-  const initialComments = nowPlaying?.spotifyTrackId
-    ? await getCommentTrackPayload(nowPlaying.spotifyTrackId)
-    : {
-        featureAvailable: true,
+  const [playlistHeader, nowPlaying] = await Promise.all([getMainPlaylistHeader(), getNowPlayingTrack()]);
+  let initialComments: CommentTrackPayload = {
+    featureAvailable: true,
+    version: "0",
+    markers: [],
+    threads: [],
+  };
+
+  if (nowPlaying?.spotifyTrackId) {
+    try {
+      initialComments = await getCommentTrackPayload(nowPlaying.spotifyTrackId);
+    } catch {
+      initialComments = {
+        featureAvailable: false,
         version: "0",
         markers: [],
         threads: [],
       };
+    }
+  }
 
   return (
     <html
