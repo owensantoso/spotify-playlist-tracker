@@ -13,6 +13,10 @@ type SongToolsMenuProps = {
   panelClassName?: string;
 };
 
+function getGoogleSearchUrl(parts: string[]) {
+  return `https://www.google.com/search?q=${encodeURIComponent(parts.filter(Boolean).join(" "))}`;
+}
+
 export function SongToolsMenu({
   title,
   artists,
@@ -23,6 +27,7 @@ export function SongToolsMenu({
   const [open, setOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState<"title" | "artists" | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const artistLabel = artists.join(", ");
 
   useEffect(() => {
     if (!open) {
@@ -92,12 +97,32 @@ export function SongToolsMenu({
           </button>
           <button
             type="button"
-            onClick={() => void handleCopy(artists.join(", "), "artists")}
+            onClick={() => void handleCopy(artistLabel, "artists")}
             className="flex w-full items-center justify-between rounded-xl px-2 py-2 text-left text-sm text-stone-200 transition hover:bg-white/5 hover:text-white"
           >
             <span>Artist name</span>
             {copiedKey === "artists" ? <Check className="h-4 w-4 text-emerald-300" /> : <Copy className="h-4 w-4" />}
           </button>
+          <div className="mt-2 border-t border-white/8 pt-2">
+            <p className="px-2 pb-1 font-mono text-[9px] uppercase tracking-[0.18em] text-stone-500">
+              Chords search
+            </p>
+            {[
+              { label: "Chords", term: "chords" },
+              { label: "食谱", term: "食谱" },
+              { label: "コード", term: "コード" },
+            ].map((item) => (
+              <a
+                key={item.label}
+                href={getGoogleSearchUrl([title, artistLabel, item.term])}
+                target="_blank"
+                rel="noreferrer"
+                className="flex w-full items-center justify-between rounded-xl px-2 py-2 text-left text-sm text-stone-200 transition hover:bg-white/5 hover:text-white"
+              >
+                <span>{item.label}</span>
+              </a>
+            ))}
+          </div>
         </div>
       ) : null}
     </div>
