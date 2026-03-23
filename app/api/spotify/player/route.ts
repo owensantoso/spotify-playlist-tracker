@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     action?: string;
     positionMs?: number;
     trackId?: string;
+    trackUri?: string;
   } | null;
   if (!body?.action || !isPlayerAction(body.action)) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
@@ -52,7 +53,14 @@ export async function POST(request: NextRequest) {
     await withCurrentSpotifyAccessToken(async (accessToken, _auth, refreshedSession) => {
       refreshedViewerSession = refreshedSession;
       if (body.action === "play") {
-        await playPlayback(accessToken);
+        await playPlayback(
+          accessToken,
+          body.trackUri
+            ? {
+                uris: [body.trackUri],
+              }
+            : undefined,
+        );
         return;
       }
 

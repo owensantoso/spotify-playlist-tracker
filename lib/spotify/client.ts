@@ -146,9 +146,15 @@ export function getPlaybackState(accessToken: string) {
   return spotifyRequest<SpotifyPlaybackStateResponse | undefined>("/me/player", accessToken);
 }
 
-export async function playPlayback(accessToken: string) {
+export async function playPlayback(
+  accessToken: string,
+  body?: {
+    uris?: string[];
+  },
+) {
   await spotifyRequest("/me/player/play", accessToken, {
     method: "PUT",
+    body: body ? JSON.stringify(body) : undefined,
   });
 }
 

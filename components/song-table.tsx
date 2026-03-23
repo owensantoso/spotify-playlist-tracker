@@ -3,6 +3,7 @@
 "use client";
 
 import { format } from "date-fns";
+import { ExternalLink, LoaderCircle, Play } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -27,6 +28,7 @@ type SongTableRow = {
   addedAt: Date | null;
   firstSeenAt: Date;
   spotifyUrl: string;
+  spotifyUri: string;
 };
 
 type SongTableProps = {
@@ -91,6 +93,8 @@ export function SongTable({
   nowPlayingTrackId,
 }: SongTableProps) {
   const [eventTrackId, setEventTrackId] = useState<string | null>(null);
+  const [playPendingTrackId, setPlayPendingTrackId] = useState<string | null>(null);
+  const [playErrorTrackId, setPlayErrorTrackId] = useState<string | null>(null);
 
   useEffect(() => {
     function handleTrackChange(event: Event) {
@@ -105,6 +109,51 @@ export function SongTable({
   }, []);
 
   const activeTrackId = eventTrackId ?? nowPlayingTrackId ?? null;
+
+  async function handlePlayTrack(row: SongTableRow) {
+    setPlayPendingTrackId(row.spotifyTrackId);
+    setPlayErrorTrackId(null);
+
+    try {
+      const response = await fetch("/api/spotify/player", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          action: "play",
+          trackUri: row.spotifyUri,
+        }),
+      });
+
+      await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setPlayErrorTrackId(row.spotifyTrackId);
+        return;
+      }
+
+      setEventTrackId(row.spotifyTrackId);
+      window.dispatchEvent(
+        new CustomEvent("fotm:now-playing-track", {
+          detail: {
+            trackId: row.spotifyTrackId,
+          },
+        }),
+      );
+      window.setTimeout(() => {
+        void fetch("/api/spotify/now-playing", {
+          cache: "no-store",
+          credentials: "same-origin",
+        }).catch(() => null);
+      }, 250);
+    } catch {
+      setPlayErrorTrackId(row.spotifyTrackId);
+    } finally {
+      setPlayPendingTrackId(null);
+    }
+  }
 
   if (!rows.length) {
     return <p className="text-sm text-stone-400">No active songs match this view yet.</p>;
@@ -214,14 +263,37 @@ export function SongTable({
                       {row.titleRomanized}
                     </p>
                   ) : null}
-                  <a
-                    href={row.spotifyUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="transition hover:text-[--color-accent]"
-                  >
-                    {row.title}
-                  </a>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handlePlayTrack(row)}
+                      disabled={playPendingTrackId === row.spotifyTrackId}
+                      className="min-w-0 text-left transition hover:text-[--color-accent] disabled:cursor-progress disabled:opacity-70"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        {playPendingTrackId === row.spotifyTrackId ? (
+                          <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin text-[--color-accent]" />
+                        ) : (
+                          <Play className="h-3.5 w-3.5 shrink-0 text-[--color-accent]" />
+                        )}
+                        <span className="truncate">{row.title}</span>
+                      </span>
+                    </button>
+                    <a
+                      href={row.spotifyUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 text-stone-400 transition hover:border-[--color-accent] hover:text-[--color-accent]"
+                      aria-label={`Open ${row.title} in Spotify`}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
+                  {playErrorTrackId === row.spotifyTrackId ? (
+                    <p className="mt-1 text-[11px] text-rose-300">
+                      Could not start playback. Open Spotify on an active device first.
+                    </p>
+                  ) : null}
                 </td>
                 <td className="py-3 pr-4">
                   {row.artistsRomanized?.some((artist, index) => artist && artist !== row.artists[index]) ? (

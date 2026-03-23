@@ -61,6 +61,7 @@ export default async function ActiveSongsPage({ searchParams }: ActiveSongsPageP
             addedAt: row.spotifyAddedAt,
             firstSeenAt: row.firstSeenAt,
             spotifyUrl: row.track.spotifyUrl,
+            spotifyUri: row.track.spotifyUri,
           }))}
           searchQuery={q ?? ""}
           sortBy={sortBy}
