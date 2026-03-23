@@ -1,5 +1,3 @@
-export const dynamic = "force-dynamic";
-
 import { format } from "date-fns";
 
 import { requireAuthenticatedAdmin } from "@/lib/auth";

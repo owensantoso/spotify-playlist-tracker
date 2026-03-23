@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 
+import { cacheTags, getAllStatsCacheTags } from "@/lib/cache-tags";
 import { getAdminSession } from "@/lib/session";
 import { updateSettings } from "@/lib/services/settings-service";
 import { absoluteUrl } from "@/lib/utils";
@@ -58,6 +60,14 @@ export async function POST(request: NextRequest) {
     batchedNotifications: parsed.data.batchedNotifications,
     publicDashboard: parsed.data.publicDashboard,
   });
+
+  revalidateTag(cacheTags.appSettings, "max");
+  revalidateTag(cacheTags.appShell, "max");
+  getAllStatsCacheTags().forEach((tag) => revalidateTag(tag, "max"));
+  revalidatePath("/", "layout");
+  revalidatePath("/setup");
+  revalidatePath("/admin/settings");
+  revalidatePath("/admin/logs");
 
   return NextResponse.redirect(absoluteUrl("/admin/settings?saved=1"));
 }

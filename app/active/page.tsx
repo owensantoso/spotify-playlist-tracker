@@ -1,7 +1,6 @@
-export const dynamic = "force-dynamic";
-
 import { SongTable } from "@/components/song-table";
 import { SectionCard } from "@/components/section-card";
+import { getNowPlayingTrack } from "@/lib/services/now-playing-service";
 import { type ActiveSongsSortBy, type SortDirection, getActiveSongs } from "@/lib/services/stats-service";
 
 type ActiveSongsPageProps = {
@@ -16,10 +15,13 @@ export default async function ActiveSongsPage({ searchParams }: ActiveSongsPageP
   const { q, sort, dir } = await searchParams;
   const sortBy = sort && ["track", "artist", "addedBy", "addedAt", "age"].includes(sort) ? sort : "age";
   const sortDirection = dir === "asc" ? "asc" : "desc";
-  const rows = await getActiveSongs({
-    sortBy,
-    sortDirection,
-  });
+  const [rows, nowPlaying] = await Promise.all([
+    getActiveSongs({
+      sortBy,
+      sortDirection,
+    }),
+    getNowPlayingTrack(),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-5 py-8">
@@ -37,6 +39,7 @@ export default async function ActiveSongsPage({ searchParams }: ActiveSongsPageP
         <SongTable
           rows={rows.map((row) => ({
             id: row.id,
+            spotifyTrackId: row.trackSpotifyId,
             artworkUrl: row.track.artworkUrl,
             title: row.track.name,
             titleRomanized: row.track.nameRomanized,
@@ -53,6 +56,7 @@ export default async function ActiveSongsPage({ searchParams }: ActiveSongsPageP
           searchQuery={q ?? ""}
           sortBy={sortBy}
           sortDirection={sortDirection}
+          nowPlayingTrackId={nowPlaying?.spotifyTrackId}
         />
         <script
           dangerouslySetInnerHTML={{

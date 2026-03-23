@@ -1,5 +1,3 @@
-export const dynamic = "force-dynamic";
-
 import { SectionCard } from "@/components/section-card";
 import { SongRowList } from "@/components/song-row-list";
 import { getRecentHistory } from "@/lib/services/stats-service";
@@ -13,6 +11,7 @@ export default async function HistoryPage() {
         <SongRowList
           items={history.recentAdditions.map((item) => ({
             id: item.id,
+            spotifyTrackId: item.trackSpotifyId,
             title: item.track.name,
             titleRomanized: item.track.nameRomanized,
             artists: item.track.artistNames,
@@ -34,6 +33,7 @@ export default async function HistoryPage() {
         <SongRowList
           items={history.recentRemovals.map((item) => ({
             id: item.id,
+            spotifyTrackId: item.trackSpotifyId,
             title: item.track.name,
             titleRomanized: item.track.nameRomanized,
             artists: item.track.artistNames,

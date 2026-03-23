@@ -1,6 +1,7 @@
 import "server-only";
 
 import { LifecycleStatus } from "@prisma/client";
+import { unstable_cache } from "next/cache";
 import {
   eachDayOfInterval,
   differenceInCalendarDays,
@@ -9,7 +10,9 @@ import {
   startOfWeek,
 } from "date-fns";
 
+import { cacheTags } from "@/lib/cache-tags";
 import { db } from "@/lib/db";
+import { getCachedSettings } from "@/lib/services/settings-service";
 import { formatLifetimeMs, getPlaylistStartDate } from "@/lib/utils";
 
 export type ActiveSongsSortBy = "track" | "artist" | "addedBy" | "addedAt" | "age";
@@ -98,8 +101,8 @@ function buildContinuousDaySeries(
   });
 }
 
-export async function getOverviewStats() {
-  const settings = await db.appSettings.findUnique({ where: { id: 1 } });
+async function readOverviewStats() {
+  const settings = await getCachedSettings();
   const mainPlaylistId = settings?.mainPlaylistId;
   const [activeSongsCount, totalUniqueSongs, contributorRows, latestSync, removedLifecycles] =
     await Promise.all([
@@ -160,8 +163,17 @@ export async function getOverviewStats() {
   };
 }
 
-export async function getLengthStats(limit = 6): Promise<LengthStats> {
-  const settings = await db.appSettings.findUnique({ where: { id: 1 } });
+const getOverviewStatsCached = unstable_cache(readOverviewStats, ["overview-stats"], {
+  tags: [cacheTags.overviewStats],
+  revalidate: 60,
+});
+
+export async function getOverviewStats() {
+  return getOverviewStatsCached();
+}
+
+async function readLengthStats(limit = 6): Promise<LengthStats> {
+  const settings = await getCachedSettings();
   const activeLifecycles = await db.trackLifecycle.findMany({
     where: {
       status: LifecycleStatus.ACTIVE,
@@ -209,8 +221,17 @@ export async function getLengthStats(limit = 6): Promise<LengthStats> {
   };
 }
 
-export async function getMainPlaylistHeader() {
-  const settings = await db.appSettings.findUnique({ where: { id: 1 } });
+const getLengthStatsCached = unstable_cache(readLengthStats, ["length-stats"], {
+  tags: [cacheTags.lengthStats],
+  revalidate: 60,
+});
+
+export async function getLengthStats(limit = 6): Promise<LengthStats> {
+  return getLengthStatsCached(limit);
+}
+
+async function readMainPlaylistHeader() {
+  const settings = await getCachedSettings();
   const playlist = settings?.mainPlaylistId
     ? await db.playlist.findUnique({
         where: { spotifyPlaylistId: settings.mainPlaylistId },
@@ -228,6 +249,15 @@ export async function getMainPlaylistHeader() {
   };
 }
 
+const getMainPlaylistHeaderCached = unstable_cache(readMainPlaylistHeader, ["app-shell"], {
+  tags: [cacheTags.appShell],
+  revalidate: 60 * 5,
+});
+
+export async function getMainPlaylistHeader() {
+  return getMainPlaylistHeaderCached();
+}
+
 function compareText(left: string, right: string, direction: SortDirection) {
   return direction === "asc" ? left.localeCompare(right) : right.localeCompare(left);
 }
@@ -236,7 +266,7 @@ function compareNumber(left: number, right: number, direction: SortDirection) {
   return direction === "asc" ? left - right : right - left;
 }
 
-export async function getActiveSongs({
+async function readActiveSongs({
   query,
   sortBy = "age",
   sortDirection = "desc",
@@ -245,7 +275,7 @@ export async function getActiveSongs({
   sortBy?: ActiveSongsSortBy;
   sortDirection?: SortDirection;
 } = {}) {
-  const settings = await db.appSettings.findUnique({ where: { id: 1 } });
+  const settings = await getCachedSettings();
   const lifecycles = await db.trackLifecycle.findMany({
     where: {
       status: LifecycleStatus.ACTIVE,
@@ -309,8 +339,21 @@ export async function getActiveSongs({
   });
 }
 
-export async function getRecentHistory(limit = 12) {
-  const settings = await db.appSettings.findUnique({ where: { id: 1 } });
+const getActiveSongsCached = unstable_cache(readActiveSongs, ["active-songs"], {
+  tags: [cacheTags.activeSongs],
+  revalidate: 60,
+});
+
+export async function getActiveSongs(options: {
+  query?: string;
+  sortBy?: ActiveSongsSortBy;
+  sortDirection?: SortDirection;
+} = {}) {
+  return getActiveSongsCached(options);
+}
+
+async function readRecentHistory(limit = 12) {
+  const settings = await getCachedSettings();
   const [additionCandidates, recentRemovals] = await Promise.all([
     db.trackLifecycle.findMany({
       where: {
@@ -341,8 +384,17 @@ export async function getRecentHistory(limit = 12) {
   return { recentAdditions, recentRemovals };
 }
 
-export async function getContributorLeaderboard() {
-  const settings = await db.appSettings.findUnique({ where: { id: 1 } });
+const getRecentHistoryCached = unstable_cache(readRecentHistory, ["recent-history"], {
+  tags: [cacheTags.recentHistory],
+  revalidate: 60,
+});
+
+export async function getRecentHistory(limit = 12) {
+  return getRecentHistoryCached(limit);
+}
+
+async function readContributorLeaderboard() {
+  const settings = await getCachedSettings();
   const lifecycles = await db.trackLifecycle.findMany({
     where: {
       addedBySpotifyUserId: { not: null },
@@ -409,8 +461,21 @@ export async function getContributorLeaderboard() {
     .sort((left, right) => right.totalSongs - left.totalSongs);
 }
 
-export async function getLongestLastingSongs(limit = 10) {
-  const settings = await db.appSettings.findUnique({ where: { id: 1 } });
+const getContributorLeaderboardCached = unstable_cache(
+  readContributorLeaderboard,
+  ["contributor-leaderboard"],
+  {
+    tags: [cacheTags.contributorLeaderboard],
+    revalidate: 60,
+  },
+);
+
+export async function getContributorLeaderboard() {
+  return getContributorLeaderboardCached();
+}
+
+async function readLongestLastingSongs(limit = 10) {
+  const settings = await getCachedSettings();
   const lifecycles = await db.trackLifecycle.findMany({
     where: {
       playlistSpotifyId: settings?.mainPlaylistId,
@@ -430,15 +495,37 @@ export async function getLongestLastingSongs(limit = 10) {
     .slice(0, limit);
 }
 
-export async function getSyncRuns(limit = 25) {
+const getLongestLastingSongsCached = unstable_cache(
+  readLongestLastingSongs,
+  ["longest-lasting-songs"],
+  {
+    tags: [cacheTags.longestLastingSongs],
+    revalidate: 60,
+  },
+);
+
+export async function getLongestLastingSongs(limit = 10) {
+  return getLongestLastingSongsCached(limit);
+}
+
+async function readSyncRuns(limit = 25) {
   return db.syncRun.findMany({
     orderBy: { startedAt: "desc" },
     take: limit,
   });
 }
 
-export async function getDashboardCharts(): Promise<DashboardCharts> {
-  const settings = await db.appSettings.findUnique({ where: { id: 1 } });
+const getSyncRunsCached = unstable_cache(readSyncRuns, ["sync-runs"], {
+  tags: [cacheTags.syncRuns],
+  revalidate: 30,
+});
+
+export async function getSyncRuns(limit = 25) {
+  return getSyncRunsCached(limit);
+}
+
+async function readDashboardCharts(): Promise<DashboardCharts> {
+  const settings = await getCachedSettings();
   const mainPlaylistId = settings?.mainPlaylistId;
 
   if (!mainPlaylistId) {
@@ -607,4 +694,13 @@ export async function getDashboardCharts(): Promise<DashboardCharts> {
     additionsHeatmap,
     removalAgeHistogram,
   };
+}
+
+const getDashboardChartsCached = unstable_cache(readDashboardCharts, ["dashboard-charts"], {
+  tags: [cacheTags.dashboardCharts],
+  revalidate: 60,
+});
+
+export async function getDashboardCharts(): Promise<DashboardCharts> {
+  return getDashboardChartsCached();
 }

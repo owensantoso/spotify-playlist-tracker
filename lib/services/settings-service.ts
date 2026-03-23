@@ -1,7 +1,23 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+
+import { cacheTags } from "@/lib/cache-tags";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+
+const readAppSettingsCached = unstable_cache(
+  async () => db.appSettings.findUnique({ where: { id: 1 } }),
+  ["app-settings"],
+  {
+    tags: [cacheTags.appSettings],
+    revalidate: 60 * 5,
+  },
+);
+
+export async function getCachedSettings() {
+  return readAppSettingsCached();
+}
 
 export async function getOrCreateSettings() {
   const existing = await db.appSettings.findUnique({ where: { id: 1 } });

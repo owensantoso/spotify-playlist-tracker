@@ -1,5 +1,3 @@
-export const dynamic = "force-dynamic";
-
 import Link from "next/link";
 
 import { LogoutForm } from "@/components/logout-form";
@@ -40,6 +38,9 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
             </p>
             <p className="text-sm text-stone-400">
               The first Spotify account that logs in becomes the admin. The app stores Spotify tokens server-side only.
+            </p>
+            <p className="mt-2 text-sm text-stone-400">
+              The header now-playing feature uses Spotify playback access. If you connected before this update, log out and reconnect once to grant the extra permission.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">

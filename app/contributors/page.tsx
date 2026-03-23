@@ -1,5 +1,3 @@
-export const dynamic = "force-dynamic";
-
 import { SectionCard } from "@/components/section-card";
 import { getContributorLeaderboard, getLongestLastingSongs } from "@/lib/services/stats-service";
 import { formatLifetimeMs, getSpotifyUserUrl } from "@/lib/utils";

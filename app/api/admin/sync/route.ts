@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { SyncTriggerSource } from "@prisma/client";
 
+import { getAllStatsCacheTags } from "@/lib/cache-tags";
 import { getAdminSession } from "@/lib/session";
 import { runSync } from "@/lib/services/sync-engine";
 import { absoluteUrl } from "@/lib/utils";
@@ -20,6 +22,11 @@ export async function POST(request: NextRequest) {
 
   const result = await runSync(SyncTriggerSource.MANUAL);
   console.log("[api/admin/sync] result", result);
+  if (result.ok) {
+    getAllStatsCacheTags().forEach((tag) => revalidateTag(tag, "max"));
+    revalidatePath("/setup");
+    revalidatePath("/admin/logs");
+  }
   if (wantsRedirect) {
     if (result.ok) {
       return NextResponse.redirect(

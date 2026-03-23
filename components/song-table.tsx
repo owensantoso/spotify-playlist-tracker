@@ -1,12 +1,14 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { format } from "date-fns";
+import Link from "next/link";
 
 import type { ActiveSongsSortBy, SortDirection } from "@/lib/services/stats-service";
-import { formatRelativeDuration, getPlaylistStartDate, getSpotifyUserUrl } from "@/lib/utils";
+import { cn, formatRelativeDuration, getPlaylistStartDate, getSpotifyUserUrl } from "@/lib/utils";
 
 type SongTableRow = {
   id: string;
+  spotifyTrackId: string;
   artworkUrl: string | null;
   title: string;
   titleRomanized?: string | null;
@@ -26,6 +28,7 @@ type SongTableProps = {
   searchQuery?: string;
   sortBy: ActiveSongsSortBy;
   sortDirection: SortDirection;
+  nowPlayingTrackId?: string | null;
 };
 
 type SortableHeaderProps = {
@@ -60,20 +63,27 @@ function SortableHeader({ label, column, sortBy, sortDirection, searchQuery }: S
 
   return (
     <th className="pb-2.5 pr-4">
-      <a
+      <Link
         href={getSortHref(column, sortBy, sortDirection, searchQuery)}
+        prefetch
         className={`inline-flex cursor-pointer items-center gap-1 transition hover:text-stone-200 ${
           isActive ? "font-semibold text-[--color-accent]" : ""
         }`}
       >
         <span>{label}</span>
         {arrow ? <span aria-hidden="true">{arrow}</span> : null}
-      </a>
+      </Link>
     </th>
   );
 }
 
-export function SongTable({ rows, searchQuery, sortBy, sortDirection }: SongTableProps) {
+export function SongTable({
+  rows,
+  searchQuery,
+  sortBy,
+  sortDirection,
+  nowPlayingTrackId,
+}: SongTableProps) {
   if (!rows.length) {
     return <p className="text-sm text-stone-400">No active songs match this view yet.</p>;
   }
@@ -128,13 +138,29 @@ export function SongTable({ rows, searchQuery, sortBy, sortDirection }: SongTabl
           {rows.map((row) => {
             const contributorUrl = getSpotifyUserUrl(row.contributorSpotifyUserId, row.contributorProfileUrl);
             const searchValue = `${row.title} ${row.titleRomanized ?? ""} ${row.artists.join(" ")} ${(row.artistsRomanized ?? []).join(" ")}`.toLocaleLowerCase();
+            const isNowPlaying = nowPlayingTrackId === row.spotifyTrackId;
 
             return (
-              <tr key={row.id} data-song-row="true" data-search={searchValue}>
+              <tr
+                key={row.id}
+                data-song-row="true"
+                data-search={searchValue}
+                className={cn(
+                  "transition",
+                  isNowPlaying && "bg-[--color-accent]/8 shadow-[inset_4px_0_0_0_rgba(243,167,92,0.95)]",
+                )}
+              >
                 <td className="py-3 pr-4">
                   <a href={row.spotifyUrl} target="_blank" rel="noreferrer" className="block w-fit">
                     {row.artworkUrl ? (
-                      <img src={row.artworkUrl} alt="" className="h-10 w-10 rounded-xl object-cover" />
+                      <img
+                        src={row.artworkUrl}
+                        alt=""
+                        className={cn(
+                          "h-10 w-10 rounded-xl object-cover",
+                          isNowPlaying && "ring-2 ring-[--color-accent]/70 ring-offset-2 ring-offset-[--color-ink]",
+                        )}
+                      />
                     ) : (
                       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/6 text-[10px] text-stone-500">
                         n/a
@@ -143,6 +169,11 @@ export function SongTable({ rows, searchQuery, sortBy, sortDirection }: SongTabl
                   </a>
                 </td>
                 <td className="py-3 pr-4 font-medium text-stone-100">
+                  {isNowPlaying ? (
+                    <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[--color-accent]">
+                      Now playing
+                    </p>
+                  ) : null}
                   {row.titleRomanized ? (
                     <p className="mb-0.5 max-w-[22rem] font-mono text-[8px] font-normal uppercase leading-[1.15] tracking-[0.04em] text-stone-300">
                       {row.titleRomanized}

@@ -44,6 +44,13 @@ export type SpotifyTrack = {
   external_urls?: SpotifyExternalUrls;
 };
 
+export type SpotifyCurrentlyPlayingResponse = {
+  is_playing: boolean;
+  progress_ms?: number | null;
+  currently_playing_type?: string;
+  item?: SpotifyTrack | { type: string } | null;
+};
+
 export type SpotifyPlaylistItemTrack = SpotifyTrack | { type: string } | null;
 
 export type SpotifyPlaylistTrackItem = {

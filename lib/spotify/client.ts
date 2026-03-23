@@ -1,7 +1,9 @@
 import "server-only";
 
 import { env } from "@/lib/env";
+import { SPOTIFY_SCOPE_STRING } from "@/lib/spotify/scopes";
 import type {
+  SpotifyCurrentlyPlayingResponse,
   SpotifyPaging,
   SpotifyPlaylist,
   SpotifyPlaylistTrackItem,
@@ -110,7 +112,7 @@ export function buildSpotifyAuthorizeUrl(state: string) {
     client_id: env.SPOTIFY_CLIENT_ID,
     response_type: "code",
     redirect_uri: env.SPOTIFY_REDIRECT_URI,
-    scope: "user-read-private playlist-read-private playlist-read-collaborative playlist-modify-private playlist-modify-public",
+    scope: SPOTIFY_SCOPE_STRING,
     state,
   });
 
@@ -119,6 +121,13 @@ export function buildSpotifyAuthorizeUrl(state: string) {
 
 export function getCurrentUser(accessToken: string) {
   return spotifyRequest<SpotifyUserProfile>("/me", accessToken);
+}
+
+export function getCurrentlyPlaying(accessToken: string) {
+  return spotifyRequest<SpotifyCurrentlyPlayingResponse | undefined>(
+    "/me/player/currently-playing",
+    accessToken,
+  );
 }
 
 export function getPlaylist(accessToken: string, playlistId: string) {

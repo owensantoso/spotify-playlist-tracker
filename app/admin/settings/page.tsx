@@ -1,5 +1,3 @@
-export const dynamic = "force-dynamic";
-
 import { requireAuthenticatedAdmin } from "@/lib/auth";
 import { getOrCreateSettings } from "@/lib/services/settings-service";
 

@@ -2,11 +2,9 @@ import type { Metadata } from "next";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 
 import { Navigation } from "@/components/navigation";
-import { getCurrentAdminContext } from "@/lib/auth";
+import { getNowPlayingTrack } from "@/lib/services/now-playing-service";
 import { getMainPlaylistHeader } from "@/lib/services/stats-service";
 import "./globals.css";
-
-export const dynamic = "force-dynamic";
 
 const displayFont = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -29,22 +27,22 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [admin, playlistHeader] = await Promise.all([
-    getCurrentAdminContext(),
+  const [playlistHeader, nowPlaying] = await Promise.all([
     getMainPlaylistHeader(),
+    getNowPlayingTrack(),
   ]);
 
   return (
     <html
       lang="en"
-      className={`${displayFont.variable} ${monoFont.variable} h-full antialiased`}
+        className={`${displayFont.variable} ${monoFont.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-[--color-ink] text-stone-100">
         <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(255,181,91,0.18),_transparent_32%),radial-gradient(circle_at_80%_0%,_rgba(107,167,128,0.18),_transparent_30%),linear-gradient(180deg,_#10201a,_#08110d_58%,_#050907)]">
           <Navigation
-            isAdmin={admin.isAuthenticated}
             playlistName={playlistHeader.name}
             playlistUrl={playlistHeader.spotifyUrl}
+            nowPlaying={nowPlaying}
           />
           <main className="pb-16">{children}</main>
         </div>

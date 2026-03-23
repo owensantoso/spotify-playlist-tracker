@@ -1,22 +1,22 @@
-export const dynamic = "force-dynamic";
-
 import { format } from "date-fns";
 
 import { ActiveTrendCard, ContributorShareCard, HeatmapCard, HistogramCard, RankingBarCard } from "@/components/dashboard-charts";
 import { SectionCard } from "@/components/section-card";
 import { SongRowList } from "@/components/song-row-list";
 import { StatCard } from "@/components/stat-card";
+import { getNowPlayingTrack } from "@/lib/services/now-playing-service";
 import { getContributorLeaderboard, getDashboardCharts, getLengthStats, getLongestLastingSongs, getOverviewStats, getRecentHistory } from "@/lib/services/stats-service";
 import { formatLifetimeMs } from "@/lib/utils";
 
 export default async function HomePage() {
-  const [overview, history, longestLasting, leaderboard, charts, lengthStats] = await Promise.all([
+  const [overview, history, longestLasting, leaderboard, charts, lengthStats, nowPlaying] = await Promise.all([
     getOverviewStats(),
     getRecentHistory(6),
     getLongestLastingSongs(6),
     getContributorLeaderboard(),
     getDashboardCharts(),
     getLengthStats(6),
+    getNowPlayingTrack(),
   ]);
 
   if (!overview.publicDashboard) {
@@ -203,6 +203,7 @@ export default async function HomePage() {
           <SongRowList
             items={history.recentAdditions.map((item) => ({
               id: item.id,
+              spotifyTrackId: item.trackSpotifyId,
               title: item.track.name,
               titleRomanized: item.track.nameRomanized,
               artists: item.track.artistNames,
@@ -217,6 +218,7 @@ export default async function HomePage() {
               firstSeenAt: item.firstSeenAt,
             }))}
             emptyLabel="No additions have been tracked yet."
+            nowPlayingTrackId={nowPlaying?.spotifyTrackId}
           />
         </SectionCard>
 
@@ -224,6 +226,7 @@ export default async function HomePage() {
           <SongRowList
             items={history.recentRemovals.map((item) => ({
               id: item.id,
+              spotifyTrackId: item.trackSpotifyId,
               title: item.track.name,
               titleRomanized: item.track.nameRomanized,
               artists: item.track.artistNames,
@@ -240,6 +243,7 @@ export default async function HomePage() {
             }))}
             emptyLabel="No removals observed yet."
             showLifetime
+            nowPlayingTrackId={nowPlaying?.spotifyTrackId}
           />
         </SectionCard>
       </div>

@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 
 import { consumeOAuthState } from "@/lib/auth-state";
@@ -32,6 +33,9 @@ export async function GET(request: NextRequest) {
     });
     const response = NextResponse.redirect(absoluteUrl("/setup?connected=1"));
     setAdminSessionOnResponse(response, profile.id);
+    revalidatePath("/setup");
+    revalidatePath("/admin/settings");
+    revalidatePath("/admin/logs");
 
     return response;
   } catch (error) {
