@@ -9,6 +9,32 @@ import { normalizePlaylistItems } from "@/lib/spotify/normalize";
 import { getAdminAccount, withAdminAccessToken } from "@/lib/services/admin-service";
 import { getOrCreateSettings } from "@/lib/services/settings-service";
 
+export type ConfiguredPlaylistValidation = {
+  mainPlaylist: {
+    name: string;
+  };
+  archivePlaylist: {
+    name: string;
+  };
+  canWriteArchive: boolean;
+};
+
+function toConfiguredPlaylistValidation(input: {
+  mainPlaylist: { name: string };
+  archivePlaylist: { name: string };
+  canWriteArchive: boolean;
+}): ConfiguredPlaylistValidation {
+  return {
+    mainPlaylist: {
+      name: input.mainPlaylist.name,
+    },
+    archivePlaylist: {
+      name: input.archivePlaylist.name,
+    },
+    canWriteArchive: input.canWriteArchive,
+  };
+}
+
 export async function validateConfiguredPlaylists() {
   const settings = await getOrCreateSettings();
   const adminAccount = await getAdminAccount();
@@ -84,13 +110,54 @@ export async function validateConfiguredPlaylists() {
       }),
     ]);
 
-    return {
+    return toConfiguredPlaylistValidation({
       mainPlaylist,
       archivePlaylist,
       canWriteArchive:
         archivePlaylist.owner.id === adminAccount?.spotifyUserId || archivePlaylist.collaborative,
-    };
+    });
   });
+}
+
+export async function getConfiguredPlaylistsValidation(options: { maxAgeMs?: number } = {}) {
+  const settings = await getOrCreateSettings();
+  const maxAgeMs = options.maxAgeMs ?? 15 * 60 * 1000;
+  const playlists = await db.playlist.findMany({
+    where: {
+      spotifyPlaylistId: {
+        in: [settings.mainPlaylistId, settings.archivePlaylistId],
+      },
+    },
+    select: {
+      spotifyPlaylistId: true,
+      name: true,
+      canWrite: true,
+      lastValidatedAt: true,
+    },
+  });
+
+  const mainPlaylist = playlists.find(
+    (playlist) => playlist.spotifyPlaylistId === settings.mainPlaylistId,
+  );
+  const archivePlaylist = playlists.find(
+    (playlist) => playlist.spotifyPlaylistId === settings.archivePlaylistId,
+  );
+  const now = Date.now();
+  const recentlyValidated =
+    mainPlaylist?.lastValidatedAt &&
+    archivePlaylist?.lastValidatedAt &&
+    now - mainPlaylist.lastValidatedAt.getTime() <= maxAgeMs &&
+    now - archivePlaylist.lastValidatedAt.getTime() <= maxAgeMs;
+
+  if (mainPlaylist && archivePlaylist && recentlyValidated) {
+    return toConfiguredPlaylistValidation({
+      mainPlaylist,
+      archivePlaylist,
+      canWriteArchive: archivePlaylist.canWrite,
+    });
+  }
+
+  return validateConfiguredPlaylists();
 }
 
 export async function seedArchiveEntriesFromRemoteArchive() {

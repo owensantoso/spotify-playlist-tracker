@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { setViewerSessionOnResponse } from "@/lib/session";
-import { getCommentTrackPayload } from "@/lib/services/comment-service";
 import {
   getCurrentSpotifyAuth,
   getNowPlayingResult,
 } from "@/lib/services/now-playing-service";
 
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await getCurrentSpotifyAuth();
   if (!auth?.spotifyUserId) {
     return NextResponse.json(
@@ -24,18 +23,14 @@ export async function GET() {
   const { nowPlaying, refreshedViewerSession } = await getNowPlayingResult({
     refreshViewerSession: true,
   });
-  const comments =
-    nowPlaying?.spotifyTrackId
-      ? await getCommentTrackPayload(nowPlaying.spotifyTrackId)
-      : {
-          featureAvailable: true,
-          version: "0",
-          markers: [],
-          threads: [],
-        };
+  const includeComments = new URL(request.url).searchParams.get("comments") === "1";
 
   const response = NextResponse.json(
-    { nowPlaying, comments, fetchedAt: Date.now() },
+    {
+      nowPlaying,
+      commentsIncluded: includeComments,
+      fetchedAt: Date.now(),
+    },
     {
       headers: {
         "Cache-Control": "no-store",

@@ -7,6 +7,7 @@ import {
   CommentUnauthorizedError,
   CommentValidationError,
   createTopLevelComment,
+  getCommentTrackPayload,
   isCommentFeatureUnavailable,
 } from "@/lib/services/comment-service";
 
@@ -17,6 +18,30 @@ type CreateCommentRequest = {
   body?: string;
   clientSubmissionId?: string;
 };
+
+export async function GET(request: NextRequest) {
+  const trackId = request.nextUrl.searchParams.get("trackId")?.trim();
+  if (!trackId) {
+    return NextResponse.json({ error: "trackId is required" }, { status: 400 });
+  }
+
+  const payload = await getCommentTrackPayload(trackId);
+
+  return NextResponse.json(
+    {
+      featureAvailable: payload.featureAvailable,
+      trackId,
+      version: payload.version,
+      markers: payload.markers,
+      threads: payload.threads,
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    },
+  );
+}
 
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as CreateCommentRequest | null;

@@ -280,17 +280,111 @@ export async function getCommentThreads(trackSpotifyId: string): Promise<ReadRes
 }
 
 export async function getCommentTrackPayload(trackSpotifyId: string): Promise<CommentTrackPayload> {
-  const [markers, threads] = await Promise.all([
-    getCommentMarkers(trackSpotifyId),
-    getCommentThreads(trackSpotifyId),
-  ]);
+  try {
+    return await ensureCommentTables(async () => {
+      const comments = await db.songComment.findMany({
+        where: {
+          trackSpotifyId,
+          deletedAt: null,
+        },
+        orderBy: [{ timestampMs: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          trackSpotifyId: true,
+          threadRootId: true,
+          parentCommentId: true,
+          timestampMs: true,
+          markerBucketSecond: true,
+          body: true,
+          createdAt: true,
+          updatedAt: true,
+          authorSpotifyUserId: true,
+          authorDisplayNameSnapshot: true,
+          authorImageUrlSnapshot: true,
+          authorProfileUrlSnapshot: true,
+        },
+      });
 
-  return {
-    featureAvailable: markers.featureAvailable && threads.featureAvailable,
-    version: threads.version !== "0" ? threads.version : markers.version,
-    markers: markers.data,
-    threads: threads.data,
-  };
+      const nodes = new Map<string, CommentThread>();
+      const topLevelComments = comments.filter((comment) => !comment.parentCommentId);
+      for (const comment of comments) {
+        nodes.set(comment.id, {
+          id: comment.id,
+          trackSpotifyId: comment.trackSpotifyId,
+          threadRootId: comment.threadRootId,
+          parentCommentId: comment.parentCommentId,
+          timestampMs: comment.timestampMs,
+          markerBucketSecond: comment.markerBucketSecond,
+          body: comment.body,
+          createdAt: comment.createdAt.toISOString(),
+          updatedAt: comment.updatedAt.toISOString(),
+          author: mapAuthor(comment),
+          replies: [],
+        });
+      }
+
+      const threads: CommentThread[] = [];
+      for (const node of nodes.values()) {
+        if (node.parentCommentId) {
+          const parent = nodes.get(node.parentCommentId);
+          if (parent) {
+            parent.replies.push(node);
+          }
+          continue;
+        }
+
+        threads.push(node);
+      }
+
+      const grouped = new Map<number, typeof topLevelComments>();
+      for (const comment of topLevelComments) {
+        const group = grouped.get(comment.markerBucketSecond) ?? [];
+        group.push(comment);
+        grouped.set(comment.markerBucketSecond, group);
+      }
+
+      const markers = [...grouped.entries()].map(([bucket, group]) => {
+        const sortedByCreated = [...group].sort(
+          (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
+        );
+        const preview = sortedByCreated[0];
+        const uniqueAuthors = new Map<string, MarkerAuthor>();
+        for (const comment of sortedByCreated) {
+          if (!uniqueAuthors.has(comment.authorSpotifyUserId) && uniqueAuthors.size < 3) {
+            uniqueAuthors.set(comment.authorSpotifyUserId, mapAuthor(comment));
+          }
+        }
+
+        return {
+          markerBucketSecond: bucket,
+          timestampMsRepresentative: Math.min(...group.map((comment) => comment.timestampMs)),
+          commentCount: group.length,
+          threadCount: group.length,
+          authors: [...uniqueAuthors.values()],
+          previewComment: preview.body,
+          topLevelCommentIds: group.map((comment) => comment.id),
+        } satisfies CommentMarker;
+      });
+
+      return {
+        featureAvailable: true,
+        version: computeVersion(comments.map((comment) => comment.updatedAt)),
+        markers,
+        threads,
+      };
+    });
+  } catch (error) {
+    if (isCommentFeatureUnavailableError(error)) {
+      return {
+        featureAvailable: false,
+        version: "0",
+        markers: [],
+        threads: [],
+      };
+    }
+
+    throw error;
+  }
 }
 
 export async function getCommentCountMap(trackSpotifyIds: Array<string | null | undefined>) {

@@ -77,6 +77,7 @@ model UserAccount {
 model SpotifyUser {
   spotifyUserId   String           @id
   displayName     String?
+  imageUrl        String?
   profileUrl      String?
   addedLifecycles TrackLifecycle[] @relation("LifecycleContributor")
   songComments    SongComment[]    @relation("SongCommentAuthor")

@@ -24,6 +24,7 @@ type CommentMutationResponse = {
   ok?: boolean;
   error?: string;
   code?: string;
+  comment?: CommentTrackPayload["threads"][number];
 };
 
 type NowPlayingCommentsProps = {
@@ -34,6 +35,58 @@ type NowPlayingCommentsProps = {
   onRefreshNowPlaying: () => Promise<NowPlayingTrack | null>;
   commentPayload: CommentTrackPayload;
 };
+
+function applyNewTopLevelComment(
+  payload: CommentTrackPayload,
+  comment: CommentTrackPayload["threads"][number],
+): CommentTrackPayload {
+  const existingBucket = payload.markers.find(
+    (marker) => marker.markerBucketSecond === comment.markerBucketSecond,
+  );
+  const nextMarkers = existingBucket
+    ? payload.markers.map((marker) =>
+        marker.markerBucketSecond === comment.markerBucketSecond
+          ? {
+              ...marker,
+              commentCount: marker.commentCount + 1,
+              threadCount: marker.threadCount + 1,
+              previewComment: comment.body,
+              authors: [
+                comment.author,
+                ...marker.authors.filter(
+                  (author) => author.spotifyUserId !== comment.author.spotifyUserId,
+                ),
+              ].slice(0, 3),
+              topLevelCommentIds: [...marker.topLevelCommentIds, comment.id],
+            }
+          : marker,
+      )
+    : [
+        ...payload.markers,
+        {
+          markerBucketSecond: comment.markerBucketSecond,
+          timestampMsRepresentative: comment.timestampMs,
+          commentCount: 1,
+          threadCount: 1,
+          authors: [comment.author],
+          previewComment: comment.body,
+          topLevelCommentIds: [comment.id],
+        },
+      ].sort((left, right) => left.markerBucketSecond - right.markerBucketSecond);
+
+  return {
+    featureAvailable: payload.featureAvailable,
+    version: comment.updatedAt,
+    markers: nextMarkers,
+    threads: [...payload.threads, comment].sort((left, right) => {
+      if (left.timestampMs !== right.timestampMs) {
+        return left.timestampMs - right.timestampMs;
+      }
+
+      return left.createdAt.localeCompare(right.createdAt);
+    }),
+  };
+}
 
 function formatMs(ms: number) {
   if (!Number.isFinite(ms) || ms <= 0) {
@@ -150,6 +203,7 @@ export function NowPlayingComments({
   commentPayload,
 }: NowPlayingCommentsProps) {
   const pathname = usePathname();
+  const [localCommentPayload, setLocalCommentPayload] = useState(commentPayload);
   const [showAllComments, setShowAllComments] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [commentDraft, setCommentDraft] = useState("");
@@ -165,10 +219,14 @@ export function NowPlayingComments({
 
   const trackId = track?.spotifyTrackId ?? null;
 
-  const markers = commentPayload.markers;
-  const threads = commentPayload.threads;
-  const markersFeatureAvailable = commentPayload.featureAvailable;
-  const threadsFeatureAvailable = commentPayload.featureAvailable;
+  const markers = localCommentPayload.markers;
+  const threads = localCommentPayload.threads;
+  const markersFeatureAvailable = localCommentPayload.featureAvailable;
+  const threadsFeatureAvailable = localCommentPayload.featureAvailable;
+
+  useEffect(() => {
+    setLocalCommentPayload(commentPayload);
+  }, [commentPayload]);
 
   useEffect(() => {
     setOpenMarkerBucket(null);
@@ -335,9 +393,12 @@ export function NowPlayingComments({
           });
 
           if (retryResponse.ok) {
+            const retryData = (await retryResponse.json().catch(() => null)) as CommentMutationResponse | null;
             setCommentDraft("");
             setComposerOpen(false);
-            await onRefreshNowPlaying();
+            if (retryData?.comment) {
+              setLocalCommentPayload((current) => applyNewTopLevelComment(current, retryData.comment!));
+            }
             return;
           }
 
@@ -352,7 +413,9 @@ export function NowPlayingComments({
 
       setCommentDraft("");
       setComposerOpen(false);
-      await onRefreshNowPlaying();
+      if (data?.comment) {
+        setLocalCommentPayload((current) => applyNewTopLevelComment(current, data.comment!));
+      }
     } catch {
       setSubmitError("Could not save your comment.");
     } finally {

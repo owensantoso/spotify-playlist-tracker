@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { romanizeText } from "@/lib/romanization";
 import type { ViewerSessionInput } from "@/lib/session";
 import { getAdminSession, getViewerSession } from "@/lib/session";
@@ -51,7 +53,7 @@ function isPlayableTrack(
   return Boolean(track && track.type === "track" && "id" in track && track.id);
 }
 
-export async function getCurrentSpotifyAuth(): Promise<CurrentSpotifyAuth> {
+const readCurrentSpotifyAuth = cache(async (): Promise<CurrentSpotifyAuth> => {
   const [viewerSession, adminSession] = await Promise.all([getViewerSession(), getAdminSession()]);
 
   if (viewerSession?.spotifyUserId) {
@@ -72,6 +74,10 @@ export async function getCurrentSpotifyAuth(): Promise<CurrentSpotifyAuth> {
   }
 
   return null;
+});
+
+export async function getCurrentSpotifyAuth(): Promise<CurrentSpotifyAuth> {
+  return readCurrentSpotifyAuth();
 }
 
 async function getCurrentSpotifyAccessContext({
@@ -181,11 +187,10 @@ export async function withViewerSpotifyAccessToken<T>(
   );
 }
 
-export async function getNowPlayingResult(
-  options: {
-    refreshViewerSession?: boolean;
-  } = {},
-): Promise<{ nowPlaying: NowPlayingTrack | null; refreshedViewerSession: ViewerSessionInput | null }> {
+const readNowPlayingResult = cache(
+  async (
+    refreshViewerSession: boolean,
+  ): Promise<{ nowPlaying: NowPlayingTrack | null; refreshedViewerSession: ViewerSessionInput | null }> => {
   const auth = await getCurrentSpotifyAuth();
   if (!auth?.spotifyUserId) {
     return {
@@ -230,7 +235,7 @@ export async function getNowPlayingResult(
           refreshedViewerSession,
         };
       },
-      options,
+      { refreshViewerSession },
     );
   } catch (error) {
     if (error instanceof SpotifyApiError && [204, 401, 403, 429].includes(error.status)) {
@@ -245,6 +250,15 @@ export async function getNowPlayingResult(
       refreshedViewerSession: null,
     };
   }
+  },
+);
+
+export async function getNowPlayingResult(
+  options: {
+    refreshViewerSession?: boolean;
+  } = {},
+): Promise<{ nowPlaying: NowPlayingTrack | null; refreshedViewerSession: ViewerSessionInput | null }> {
+  return readNowPlayingResult(Boolean(options.refreshViewerSession));
 }
 
 export async function getNowPlayingTrack(

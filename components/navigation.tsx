@@ -28,7 +28,7 @@ type AuthStatus = {
 
 type NowPlayingResponse = {
   nowPlaying: NowPlayingTrack | null;
-  comments: CommentTrackPayload;
+  commentsIncluded?: boolean;
   fetchedAt: number;
 };
 
@@ -48,6 +48,12 @@ const adminLinks = [
 const prefetchedRoutes = [...publicLinks, ...adminLinks].map((link) => link.href);
 const NOW_PLAYING_POLL_MS = 5000;
 const PROGRESS_TICK_MS = 250;
+const EMPTY_COMMENT_PAYLOAD: CommentTrackPayload = {
+  featureAvailable: true,
+  version: "0",
+  markers: [],
+  threads: [],
+};
 
 function isCurrentPath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -67,14 +73,10 @@ export function Navigation({
     isViewer: false,
     spotifyUserId: null,
   });
+  const [authStatusResolved, setAuthStatusResolved] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<NowPlayingTrack | null>(initialNowPlaying);
   const [commentPayload, setCommentPayload] = useState<CommentTrackPayload>(
-    initialComments ?? {
-      featureAvailable: true,
-      version: "0",
-      markers: [],
-      threads: [],
-    },
+    initialComments ?? EMPTY_COMMENT_PAYLOAD,
   );
   const [progressMs, setProgressMs] = useState(initialNowPlaying?.progressMs ?? 0);
   const [controlPending, setControlPending] = useState<string | null>(null);
@@ -99,15 +101,22 @@ export function Navigation({
         });
 
         if (!response.ok) {
+          if (!cancelled) {
+            setAuthStatusResolved(true);
+          }
           return;
         }
 
         const nextStatus = (await response.json()) as AuthStatus;
         if (!cancelled) {
           setAuthStatus(nextStatus);
+          setAuthStatusResolved(true);
         }
       } catch {
         // Keep the last known auth state if the status probe fails.
+        if (!cancelled) {
+          setAuthStatusResolved(true);
+        }
       }
     }
 
@@ -145,12 +154,7 @@ export function Navigation({
 
       if (response.status === 401) {
         syncNowPlaying(null);
-        setCommentPayload({
-          featureAvailable: true,
-          version: "0",
-          markers: [],
-          threads: [],
-        });
+        setCommentPayload(EMPTY_COMMENT_PAYLOAD);
         return null;
       }
 
@@ -159,8 +163,30 @@ export function Navigation({
       }
 
       const payload = (await response.json()) as NowPlayingResponse;
+      const previousTrackId = nowPlayingTrackRef.current;
       syncNowPlaying(payload.nowPlaying);
-      setCommentPayload(payload.comments);
+      const nextTrackId = payload.nowPlaying?.spotifyTrackId ?? null;
+
+      if (!nextTrackId) {
+        setCommentPayload(EMPTY_COMMENT_PAYLOAD);
+      } else if (previousTrackId !== nextTrackId) {
+        try {
+          const commentsResponse = await fetch(
+            `/api/comments?trackId=${encodeURIComponent(nextTrackId)}`,
+            {
+              cache: "no-store",
+              credentials: "same-origin",
+            },
+          );
+
+          if (commentsResponse.ok && nowPlayingTrackRef.current === nextTrackId) {
+            const nextComments = (await commentsResponse.json()) as CommentTrackPayload;
+            setCommentPayload(nextComments);
+          }
+        } catch {
+          // Keep the previous comment state during transient failures.
+        }
+      }
       return payload.nowPlaying;
     } catch {
       // Keep the previous state during transient polling failures.
@@ -173,8 +199,13 @@ export function Navigation({
   });
 
   useEffect(() => {
+    if (!authStatusResolved) {
+      return;
+    }
+
     if (!authStatus.isAuthenticated) {
       syncNowPlaying(null);
+      setCommentPayload(EMPTY_COMMENT_PAYLOAD);
       return;
     }
 
@@ -186,7 +217,7 @@ export function Navigation({
     return () => {
       window.clearInterval(interval);
     };
-  }, [authStatus.isAuthenticated]);
+  }, [authStatus.isAuthenticated, authStatusResolved]);
 
   useEffect(() => {
     if (!nowPlaying?.isPlaying) {

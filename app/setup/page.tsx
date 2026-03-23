@@ -2,7 +2,7 @@ import { LogoutForm } from "@/components/logout-form";
 import { RunSyncButton } from "@/components/run-sync-button";
 import { SectionCard } from "@/components/section-card";
 import { getCurrentAdminContext } from "@/lib/auth";
-import { validateConfiguredPlaylists } from "@/lib/services/setup-service";
+import { getConfiguredPlaylistsValidation } from "@/lib/services/setup-service";
 
 type SetupPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -23,7 +23,7 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
   const admin = await getCurrentAdminContext();
   const validation =
     admin.isAuthenticated && admin.isConfigured
-      ? await validateConfiguredPlaylists().catch((error) => ({ error: String(error) }))
+      ? await getConfiguredPlaylistsValidation().catch((error) => ({ error: String(error) }))
       : null;
 
   return (
