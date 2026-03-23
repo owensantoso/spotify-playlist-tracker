@@ -308,9 +308,19 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
                   <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[--color-accent]">
                     {nowPlaying ? (nowPlaying.isPlaying ? "Now playing" : "Paused") : "Now playing"}
                   </p>
+                  {nowPlaying?.titleRomanized ? (
+                    <p className="truncate font-mono text-[10px] uppercase tracking-[0.08em] text-stone-400">
+                      {nowPlaying.titleRomanized}
+                    </p>
+                  ) : null}
                   <p className="truncate text-lg font-semibold text-stone-100">
                     {nowPlaying?.title ?? "Nothing is playing right now"}
                   </p>
+                  {nowPlaying?.artistsRomanized?.some((artist, index) => artist && artist !== nowPlaying.artists[index]) ? (
+                    <p className="truncate font-mono text-[10px] text-stone-400">
+                      {nowPlaying.artistsRomanized.join(", ")}
+                    </p>
+                  ) : null}
                   <p className="truncate text-sm text-stone-300">
                     {nowPlaying ? nowPlaying.artists.join(", ") || "Spotify" : "Start playback on Spotify and this bar will update automatically."}
                   </p>
