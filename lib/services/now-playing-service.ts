@@ -136,6 +136,51 @@ export async function withCurrentSpotifyAccessToken<T>(
   return callback(context.accessToken, context.auth, context.refreshedViewerSession);
 }
 
+export async function withViewerSpotifyAccessToken<T>(
+  callback: (
+    accessToken: string,
+    auth: Extract<Exclude<CurrentSpotifyAuth, null>, { kind: "viewer" }>,
+    refreshedViewerSession: ViewerSessionInput | null,
+  ) => Promise<T>,
+  options: {
+    refreshViewerSession?: boolean;
+  } = {},
+) {
+  const auth = await getCurrentSpotifyAuth();
+  if (!auth || auth.kind !== "viewer") {
+    throw new Error("No viewer Spotify session is active");
+  }
+
+  const expiresSoon = auth.tokenExpiresAt.getTime() - Date.now() < 60_000;
+  if (!expiresSoon) {
+    return callback(auth.accessToken, auth, null);
+  }
+
+  if (!options.refreshViewerSession) {
+    throw new Error("Viewer Spotify session refresh is required");
+  }
+
+  const refreshed = await refreshAccessToken(auth.refreshToken);
+  const refreshedViewerSession = {
+    spotifyUserId: auth.spotifyUserId,
+    accessToken: refreshed.access_token,
+    refreshToken: refreshed.refresh_token ?? auth.refreshToken,
+    tokenExpiresAt: new Date(Date.now() + refreshed.expires_in * 1000),
+  };
+
+  return callback(
+    refreshedViewerSession.accessToken,
+    {
+      kind: "viewer",
+      spotifyUserId: refreshedViewerSession.spotifyUserId,
+      accessToken: refreshedViewerSession.accessToken,
+      refreshToken: refreshedViewerSession.refreshToken,
+      tokenExpiresAt: refreshedViewerSession.tokenExpiresAt,
+    },
+    refreshedViewerSession,
+  );
+}
+
 export async function getNowPlayingResult(
   options: {
     refreshViewerSession?: boolean;

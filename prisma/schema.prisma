@@ -30,6 +30,23 @@ enum SyncTriggerSource {
   SETUP
 }
 
+enum CommentAttachmentKind {
+  IMAGE
+  AUDIO
+}
+
+enum CommentAttachmentStatus {
+  PENDING
+  READY
+  FAILED
+  BLOCKED
+}
+
+enum CommentModerationState {
+  VISIBLE
+  HIDDEN
+}
+
 model AdminAccount {
   spotifyUserId         String   @id
   displayName           String?
@@ -62,6 +79,7 @@ model SpotifyUser {
   displayName     String?
   profileUrl      String?
   addedLifecycles TrackLifecycle[] @relation("LifecycleContributor")
+  songComments    SongComment[]    @relation("SongCommentAuthor")
   userAccount     UserAccount?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -135,6 +153,55 @@ model ArchiveEntry {
   track             Track    @relation(fields: [trackSpotifyId], references: [spotifyTrackId], onDelete: Cascade)
 
   @@id([playlistSpotifyId, trackSpotifyId])
+}
+
+model SongComment {
+  id                         String                  @id
+  trackSpotifyId             String
+  threadRootId               String
+  parentCommentId            String?
+  authorSpotifyUserId        String
+  authorDisplayNameSnapshot  String?
+  authorProfileUrlSnapshot   String?
+  authorImageUrlSnapshot     String?
+  clientSubmissionId         String
+  timestampMs                Int
+  markerBucketSecond         Int
+  body                       String
+  replyCount                 Int                     @default(0)
+  attachmentCount            Int                     @default(0)
+  moderationState            CommentModerationState?
+  deletedAt                  DateTime?
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
+  author                     SpotifyUser             @relation("SongCommentAuthor", fields: [authorSpotifyUserId], references: [spotifyUserId], onDelete: Restrict)
+  threadRoot                 SongComment             @relation("SongCommentThreadRoot", fields: [threadRootId], references: [id], onDelete: Cascade)
+  threadComments             SongComment[]           @relation("SongCommentThreadRoot")
+  parentComment              SongComment?            @relation("SongCommentReplies", fields: [parentCommentId], references: [id], onDelete: Cascade)
+  replies                    SongComment[]           @relation("SongCommentReplies")
+  attachments                SongCommentAttachment[]
+
+  @@index([trackSpotifyId, markerBucketSecond])
+  @@index([trackSpotifyId, timestampMs])
+  @@index([threadRootId, createdAt])
+  @@index([parentCommentId, createdAt])
+  @@index([authorSpotifyUserId, createdAt])
+  @@unique([authorSpotifyUserId, clientSubmissionId])
+}
+
+model SongCommentAttachment {
+  id          String                  @id
+  commentId   String
+  kind        CommentAttachmentKind
+  storageUrl  String
+  mimeType    String?
+  byteSize    Int?
+  durationMs  Int?
+  status      CommentAttachmentStatus @default(PENDING)
+  createdAt   DateTime                @default(now())
+  comment     SongComment             @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([commentId, createdAt])
 }
 
 model SyncRun {

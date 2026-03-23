@@ -9,6 +9,7 @@ export async function GET() {
     {
       isAuthenticated: Boolean(viewerSession?.spotifyUserId || adminSession?.spotifyUserId),
       isAdmin: Boolean(adminSession?.spotifyUserId),
+      isViewer: Boolean(viewerSession?.spotifyUserId),
       spotifyUserId: viewerSession?.spotifyUserId ?? adminSession?.spotifyUserId ?? null,
     },
     {

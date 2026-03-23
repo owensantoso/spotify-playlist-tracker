@@ -64,7 +64,7 @@ Suggested columns:
 
 ## Relationship Boundaries
 
-- Reference `Track.spotifyTrackId` directly.
+- `SongComment.trackSpotifyId` should be a plain Spotify track ID value and must not require a foreign key to `Track`, because users can comment on personal now-playing songs that are not part of the tracked playlist dataset.
 - Reference `SpotifyUser.spotifyUserId` directly.
 - Do not couple comment writes to `UserAccount`; that migration has already been fragile in some environments.
 

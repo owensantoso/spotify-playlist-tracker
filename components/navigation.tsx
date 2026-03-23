@@ -5,8 +5,9 @@
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { NowPlayingComments } from "@/components/now-playing-comments";
 import type { NowPlayingTrack } from "@/lib/services/now-playing-service";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,7 @@ type NavigationProps = {
 type AuthStatus = {
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isViewer: boolean;
   spotifyUserId: string | null;
 };
 
@@ -48,24 +50,13 @@ function isCurrentPath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function formatMs(ms: number) {
-  if (!Number.isFinite(ms) || ms <= 0) {
-    return "0:00";
-  }
-
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
 export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPlaying }: NavigationProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [authStatus, setAuthStatus] = useState<AuthStatus>({
     isAuthenticated: false,
     isAdmin: false,
+    isViewer: false,
     spotifyUserId: null,
   });
   const [nowPlaying, setNowPlaying] = useState<NowPlayingTrack | null>(initialNowPlaying);
@@ -125,17 +116,19 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
 
       if (response.status === 401) {
         syncNowPlaying(null);
-        return;
+        return null;
       }
 
       if (!response.ok) {
-        return;
+        return nowPlaying;
       }
 
       const payload = (await response.json()) as NowPlayingResponse;
       syncNowPlaying(payload.nowPlaying);
+      return payload.nowPlaying;
     } catch {
       // Keep the previous state during transient polling failures.
+      return nowPlaying;
     }
   }
 
@@ -247,14 +240,6 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
     authStatus.isAdmin || pathname.startsWith("/admin") || pathname === "/setup"
       ? adminLinks
       : [];
-
-  const progressPercent = useMemo(() => {
-    if (!nowPlaying?.durationMs || nowPlaying.durationMs <= 0) {
-      return 0;
-    }
-
-    return Math.max(0, Math.min(100, (progressMs / nowPlaying.durationMs) * 100));
-  }, [nowPlaying?.durationMs, progressMs]);
 
   return (
     <header className="border-b border-white/10 bg-[rgba(15,23,20,0.86)] backdrop-blur">
@@ -421,19 +406,13 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
               </div>
             </div>
 
-            <div className="mt-4">
-              <div className="h-2 overflow-hidden rounded-full bg-white/8">
-                <div
-                  className="h-full rounded-full bg-[linear-gradient(90deg,rgba(243,167,92,0.92),rgba(106,161,109,0.95))] transition-[width] duration-300"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <div className="mt-2 flex items-center justify-between gap-4 text-[11px] text-stone-400">
-                <span>{formatMs(progressMs)}</span>
-                <span>{controlError ?? (controlPending ? "Syncing playback..." : "Live poll: 5s")}</span>
-                <span>{formatMs(nowPlaying?.durationMs ?? 0)}</span>
-              </div>
-            </div>
+            <NowPlayingComments
+              track={nowPlaying}
+              progressMs={progressMs}
+              authStatus={authStatus}
+              controlStatusLabel={controlError ?? (controlPending ? "Syncing playback..." : "Live poll: 5s")}
+              onRefreshNowPlaying={loadNowPlaying}
+            />
           </div>
         ) : (
           <div className="rounded-[1.8rem] border border-white/10 bg-black/10 px-4 py-4">
@@ -456,6 +435,13 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
                 Sign in with Spotify
               </a>
             </div>
+            <NowPlayingComments
+              track={nowPlaying}
+              progressMs={progressMs}
+              authStatus={authStatus}
+              controlStatusLabel="Read-only"
+              onRefreshNowPlaying={loadNowPlaying}
+            />
           </div>
         )}
       </div>

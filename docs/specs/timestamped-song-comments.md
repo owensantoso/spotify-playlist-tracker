@@ -13,7 +13,7 @@ Related docs:
 ## Goals
 
 - Let signed-in Spotify users attach a comment to the currently playing Spotify track at the authoritative current playback timestamp.
-- Make comments publicly readable without requiring sign-in.
+- Make comments publicly readable without requiring sign-in whenever the app has a resolved track context.
 - Render marker pins on the now-playing progress bar wherever the current track has comment threads.
 - Show comment previews on hover, focus, and tap.
 - Show an upcoming-comment popup roughly three seconds before a marker.
@@ -33,7 +33,7 @@ Related docs:
 ## Product Decisions
 
 - Comment scope is `trackSpotifyId`.
-- Public visitors can read comments.
+- Public visitors can read comments whenever the UI knows which track to load.
 - Only signed-in Spotify viewers can create comments or replies.
 - Admin session fallback must not be used for comment writes.
 - The authoritative comment timestamp comes from a fresh server-side playback read.
@@ -80,7 +80,7 @@ Related docs:
 3. Replies render nested beneath their parent comment in ascending creation order.
 4. The panel remains part of the now-playing section rather than opening a separate page or modal.
 5. If the track changes while the panel is open, the panel stays open and swaps to the new track’s comments.
-6. If there is no active track, the panel remains visible but shows an empty disabled state rather than stale comments.
+6. If there is no active track or no current track context can be resolved, the panel remains visible but shows an empty disabled state rather than stale comments.
 
 ### Marker Preview And Upcoming Popup
 
@@ -135,7 +135,8 @@ Related docs:
 
 ### Viewer/Auth States
 
-- Signed out: read-only comments visible, composer replaced with `Sign in with Spotify to comment`.
+- Signed out with track context: read-only comments visible, composer replaced with `Sign in with Spotify to comment`.
+- Signed out with no track context: no-active-track state visible and composer replaced with `Sign in with Spotify to comment`.
 - Signed in with active playback: composer enabled.
 - Signed in with no active playback: composer disabled with explanation and the comments panel shows a no-active-track state rather than stale comments.
 - Signed in but playback validation failed: composer remains open, draft preserved, retry CTA visible.
@@ -410,7 +411,7 @@ Client handling requirements:
 
 ## Acceptance Criteria
 
-- Public visitors can read comments for the current track without signing in.
+- Public visitors can read comments for the current track without signing in whenever the app has current-track context.
 - Signed-in viewers can create top-level comments.
 - Admin-only session presence never creates comments on behalf of a logged-out viewer.
 - Successful writes use server-side playback timestamp, not browser timestamp.
