@@ -123,9 +123,33 @@ function Avatar({
   );
 }
 
-function CommentNode({ comment, depth = 0 }: { comment: CommentThread; depth?: number }) {
+function CommentNode({
+  comment,
+  depth = 0,
+  activeBucket,
+  onBucketEnter,
+  onBucketLeave,
+}: {
+  comment: CommentThread;
+  depth?: number;
+  activeBucket: number | null;
+  onBucketEnter: (bucket: number) => void;
+  onBucketLeave: (bucket: number) => void;
+}) {
+  const isHighlighted = activeBucket === comment.markerBucketSecond;
+
   return (
-    <div className={cn("rounded-2xl border border-white/8 bg-black/10 p-3", depth > 0 && "mt-2 ml-4")}>
+    <div
+      className={cn(
+        "rounded-2xl border border-white/8 bg-black/10 p-3 transition",
+        isHighlighted && "border-[--color-accent]/45 bg-[--color-accent]/10 shadow-[0_0_0_1px_rgba(243,167,92,0.16)]",
+        depth > 0 && "mt-2 ml-4",
+      )}
+      onMouseEnter={() => onBucketEnter(comment.markerBucketSecond)}
+      onMouseLeave={() => onBucketLeave(comment.markerBucketSecond)}
+      onFocus={() => onBucketEnter(comment.markerBucketSecond)}
+      onBlur={() => onBucketLeave(comment.markerBucketSecond)}
+    >
       <div className="flex items-start gap-3">
         <Avatar author={comment.author} />
         <div className="min-w-0 flex-1">
@@ -142,7 +166,14 @@ function CommentNode({ comment, depth = 0 }: { comment: CommentThread; depth?: n
       {comment.replies.length ? (
         <div className="mt-2">
           {comment.replies.map((reply) => (
-            <CommentNode key={reply.id} comment={reply} depth={depth + 1} />
+            <CommentNode
+              key={reply.id}
+              comment={reply}
+              depth={depth + 1}
+              activeBucket={activeBucket}
+              onBucketEnter={onBucketEnter}
+              onBucketLeave={onBucketLeave}
+            />
           ))}
         </div>
       ) : null}
@@ -170,6 +201,7 @@ export function NowPlayingComments({
   const [submitPending, setSubmitPending] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [openMarkerBucket, setOpenMarkerBucket] = useState<number | null>(null);
+  const [linkedBucket, setLinkedBucket] = useState<number | null>(null);
   const [popupBucket, setPopupBucket] = useState<number | null>(null);
   const [playbackSessionKey, setPlaybackSessionKey] = useState(0);
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -224,6 +256,7 @@ export function NowPlayingComments({
 
   useEffect(() => {
     setOpenMarkerBucket(null);
+    setLinkedBucket(null);
     setPopupBucket(null);
     setComposerOpen(false);
     setSubmitError(null);
@@ -260,6 +293,7 @@ export function NowPlayingComments({
     function handlePointerDown(event: PointerEvent) {
       if (previewContainerRef.current && !previewContainerRef.current.contains(event.target as Node)) {
         setOpenMarkerBucket(null);
+        setLinkedBucket(null);
       }
     }
 
@@ -309,6 +343,17 @@ export function NowPlayingComments({
 
   const popupMarker = markers.find((marker) => marker.markerBucketSecond === popupBucket) ?? null;
   const trackDurationMs = track?.durationMs ?? 0;
+  const activeCommentBucket = linkedBucket ?? openMarkerBucket;
+
+  function handleBucketEnter(bucket: number) {
+    setLinkedBucket(bucket);
+    setOpenMarkerBucket(bucket);
+  }
+
+  function handleBucketLeave(bucket: number) {
+    setLinkedBucket((current) => (current === bucket ? null : current));
+    setOpenMarkerBucket((current) => (current === bucket ? null : current));
+  }
 
   async function handleCommentMutationError(data: CommentMutationResponse | null) {
     if (data?.code === "TRACK_CHANGED") {
@@ -456,17 +501,16 @@ export function NowPlayingComments({
                     type="button"
                     className="absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full outline-none"
                     style={{ left: `${left}%` }}
-                    onMouseEnter={() => setOpenMarkerBucket(marker.markerBucketSecond)}
-                    onMouseLeave={() =>
-                      setOpenMarkerBucket((current) =>
-                        current === marker.markerBucketSecond ? null : current,
-                      )
-                    }
-                    onFocus={() => setOpenMarkerBucket(marker.markerBucketSecond)}
+                    onMouseEnter={() => handleBucketEnter(marker.markerBucketSecond)}
+                    onMouseLeave={() => handleBucketLeave(marker.markerBucketSecond)}
+                    onFocus={() => handleBucketEnter(marker.markerBucketSecond)}
                     onClick={() =>
-                      setOpenMarkerBucket((current) =>
-                        current === marker.markerBucketSecond ? null : marker.markerBucketSecond,
-                      )
+                      setOpenMarkerBucket((current) => {
+                        const nextBucket =
+                          current === marker.markerBucketSecond ? null : marker.markerBucketSecond;
+                        setLinkedBucket(nextBucket);
+                        return nextBucket;
+                      })
                     }
                     aria-label={`Comment at ${formatMs(marker.timestampMsRepresentative)} by ${labelBase}`}
                   >
@@ -637,7 +681,13 @@ export function NowPlayingComments({
             ) : threads.length ? (
               <div className="space-y-3">
                 {threads.map((thread) => (
-                  <CommentNode key={thread.id} comment={thread} />
+                  <CommentNode
+                    key={thread.id}
+                    comment={thread}
+                    activeBucket={activeCommentBucket}
+                    onBucketEnter={handleBucketEnter}
+                    onBucketLeave={handleBucketLeave}
+                  />
                 ))}
               </div>
             ) : (
