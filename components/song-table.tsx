@@ -3,9 +3,10 @@
 "use client";
 
 import { format } from "date-fns";
-import { ExternalLink, LoaderCircle, Play } from "lucide-react";
+import { ExternalLink, Heart, LoaderCircle, Play, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 
 import { SpotifyUserLink } from "@/components/spotify-user-link";
 import type { ActiveSongsSortBy, SortDirection } from "@/lib/services/stats-service";
@@ -25,11 +26,15 @@ type SongTableRow = {
   contributorProfileUrl?: string | null;
   contributorImageUrl?: string | null;
   commentCount?: number;
+  likeScore?: number;
+  viewerReaction?: SongReactionKind | null;
   addedAt: Date | null;
   firstSeenAt: Date;
   spotifyUrl: string;
   spotifyUri: string;
 };
+
+type SongReactionKind = "LIKE" | "SUPERLIKE";
 
 type SongTableProps = {
   rows: SongTableRow[];
@@ -37,6 +42,7 @@ type SongTableProps = {
   sortBy: ActiveSongsSortBy;
   sortDirection: SortDirection;
   nowPlayingTrackId?: string | null;
+  reactionsFeatureAvailable?: boolean;
 };
 
 type SortableHeaderProps = {
@@ -91,10 +97,27 @@ export function SongTable({
   sortBy,
   sortDirection,
   nowPlayingTrackId,
+  reactionsFeatureAvailable = true,
 }: SongTableProps) {
+  const pathname = usePathname();
   const [eventTrackId, setEventTrackId] = useState<string | null>(null);
   const [playPendingTrackId, setPlayPendingTrackId] = useState<string | null>(null);
   const [playErrorTrackId, setPlayErrorTrackId] = useState<string | null>(null);
+  const [reactionState, setReactionState] = useState<Record<string, { score: number; viewerReaction: SongReactionKind | null }>>(
+    () =>
+      rows.reduce<Record<string, { score: number; viewerReaction: SongReactionKind | null }>>((acc, row) => {
+        acc[row.spotifyTrackId] = {
+          score: row.likeScore ?? 0,
+          viewerReaction: row.viewerReaction ?? null,
+        };
+        return acc;
+      }, {}),
+  );
+  const [reactionPendingTrackId, setReactionPendingTrackId] = useState<string | null>(null);
+  const [reactionErrorTrackId, setReactionErrorTrackId] = useState<string | null>(null);
+  const [holdTrackId, setHoldTrackId] = useState<string | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressTriggeredRef = useRef(false);
 
   useEffect(() => {
     function handleTrackChange(event: Event) {
@@ -109,6 +132,38 @@ export function SongTable({
   }, []);
 
   const activeTrackId = eventTrackId ?? nowPlayingTrackId ?? null;
+  const displayRows = useMemo(() => {
+    const nextRows = rows.map((row) => ({
+      ...row,
+      likeScore: reactionState[row.spotifyTrackId]?.score ?? row.likeScore ?? 0,
+      viewerReaction: reactionState[row.spotifyTrackId]?.viewerReaction ?? row.viewerReaction ?? null,
+    }));
+
+    if (sortBy !== "likes") {
+      return nextRows;
+    }
+
+    return [...nextRows].sort((left, right) => {
+      const delta = (left.likeScore ?? 0) - (right.likeScore ?? 0);
+      if (delta !== 0) {
+        return sortDirection === "asc" ? delta : -delta;
+      }
+
+      return left.title.localeCompare(right.title);
+    });
+  }, [reactionState, rows, sortBy, sortDirection]);
+
+  useEffect(() => {
+    setReactionState(
+      rows.reduce<Record<string, { score: number; viewerReaction: SongReactionKind | null }>>((acc, row) => {
+        acc[row.spotifyTrackId] = {
+          score: row.likeScore ?? 0,
+          viewerReaction: row.viewerReaction ?? null,
+        };
+        return acc;
+      }, {}),
+    );
+  }, [rows]);
 
   async function handlePlayTrack(row: SongTableRow) {
     setPlayPendingTrackId(row.spotifyTrackId);
@@ -155,7 +210,90 @@ export function SongTable({
     }
   }
 
-  if (!rows.length) {
+  async function handleReaction(row: SongTableRow, kind: SongReactionKind) {
+    if (!reactionsFeatureAvailable || reactionPendingTrackId) {
+      return;
+    }
+
+    setReactionPendingTrackId(row.spotifyTrackId);
+    setReactionErrorTrackId(null);
+
+    try {
+      const response = await fetch("/api/reactions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          trackSpotifyId: row.spotifyTrackId,
+          kind,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; score?: number; viewerReaction?: SongReactionKind | null; code?: string }
+        | null;
+      const nextScore = payload?.score;
+      const nextViewerReaction = payload?.viewerReaction ?? null;
+
+      if (response.status === 401) {
+        window.location.href = `/api/auth/spotify/login?mode=viewer&next=${encodeURIComponent(pathname || "/active")}`;
+        return;
+      }
+
+      if (!response.ok || typeof nextScore !== "number") {
+        setReactionErrorTrackId(row.spotifyTrackId);
+        return;
+      }
+
+      setReactionState((current) => ({
+        ...current,
+        [row.spotifyTrackId]: {
+          score: nextScore,
+          viewerReaction: nextViewerReaction,
+        },
+      }));
+    } catch {
+      setReactionErrorTrackId(row.spotifyTrackId);
+    } finally {
+      setReactionPendingTrackId(null);
+    }
+  }
+
+  function clearLongPress() {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    setHoldTrackId(null);
+  }
+
+  function beginLongPress(row: SongTableRow) {
+    clearLongPress();
+    longPressTriggeredRef.current = false;
+    setHoldTrackId(row.spotifyTrackId);
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      setHoldTrackId(row.spotifyTrackId);
+      void handleReaction(row, "SUPERLIKE");
+      window.setTimeout(() => {
+        setHoldTrackId((current) => (current === row.spotifyTrackId ? null : current));
+      }, 240);
+    }, 520);
+  }
+
+  function finishLongPress(row: SongTableRow) {
+    const didTrigger = longPressTriggeredRef.current;
+    clearLongPress();
+    longPressTriggeredRef.current = false;
+
+    if (!didTrigger) {
+      void handleReaction(row, "LIKE");
+    }
+  }
+
+  if (!displayRows.length) {
     return <p className="text-sm text-stone-400">No active songs match this view yet.</p>;
   }
 
@@ -171,7 +309,8 @@ export function SongTable({
           <col className="w-[22%]" />
           <col className="w-[12%]" />
           <col className="w-[8%]" />
-          <col className="w-[9%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
           <col className="w-[10%]" />
           <col className="w-[7%]" />
         </colgroup>
@@ -206,6 +345,13 @@ export function SongTable({
               sortDirection={sortDirection}
               searchQuery={searchQuery}
             />
+            <SortableHeader
+              label="Likes"
+              column="likes"
+              sortBy={sortBy}
+              sortDirection={sortDirection}
+              searchQuery={searchQuery}
+            />
             <th className="pb-2.5 pr-4">Comments</th>
             <SortableHeader
               label="Age"
@@ -218,7 +364,7 @@ export function SongTable({
           </tr>
         </thead>
         <tbody id="active-song-body" className="divide-y divide-white/6 text-stone-200">
-          {rows.map((row) => {
+          {displayRows.map((row) => {
             const searchValue = [
               row.title,
               row.titleRomanized ?? "",
@@ -230,6 +376,11 @@ export function SongTable({
             const normalizedSearchValue = normalizeSearchText(searchValue);
             const compactSearchValue = compactSearchText(searchValue);
             const isNowPlaying = activeTrackId === row.spotifyTrackId;
+            const currentReaction = reactionState[row.spotifyTrackId]?.viewerReaction ?? row.viewerReaction ?? null;
+            const likeScore = reactionState[row.spotifyTrackId]?.score ?? row.likeScore ?? 0;
+            const isHolding = holdTrackId === row.spotifyTrackId;
+            const isSuperLiked = currentReaction === "SUPERLIKE";
+            const isLiked = currentReaction === "LIKE";
 
             return (
               <tr
@@ -354,6 +505,49 @@ export function SongTable({
                 </td>
                 <td className="py-3 pr-4">
                   {row.addedAt ? format(row.addedAt, "MMM d, yyyy") : "Unknown"}
+                </td>
+                <td className="py-3 pr-4">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onPointerDown={() => beginLongPress(row)}
+                      onPointerUp={() => finishLongPress(row)}
+                      onPointerLeave={clearLongPress}
+                      onPointerCancel={clearLongPress}
+                      onClick={(event) => event.preventDefault()}
+                      disabled={reactionPendingTrackId === row.spotifyTrackId || !reactionsFeatureAvailable}
+                      className={cn(
+                        "inline-flex h-9 w-9 items-center justify-center rounded-full border transition duration-200 disabled:cursor-progress disabled:opacity-60",
+                        isSuperLiked
+                          ? "border-[--color-accent] bg-[--color-accent]/18 text-[--color-accent]"
+                          : isLiked
+                            ? "border-emerald-400/60 bg-emerald-400/12 text-emerald-200"
+                            : "border-white/10 text-stone-400 hover:border-[--color-accent]/50 hover:text-stone-100",
+                        isHolding && "scale-110 animate-pulse shadow-[0_0_26px_rgba(243,167,92,0.28)]",
+                      )}
+                      aria-label={isHolding ? `Super-like ${row.title}` : `Like ${row.title}`}
+                      title="Tap for like, hold for super-like"
+                    >
+                      {reactionPendingTrackId === row.spotifyTrackId ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : isSuperLiked || isHolding ? (
+                        <Sparkles className={cn("h-4 w-4", isHolding && "rotate-6")} />
+                      ) : (
+                        <Heart className={cn("h-4 w-4", isLiked && "fill-current")} />
+                      )}
+                    </button>
+                    <div>
+                      <p className="text-sm font-medium text-stone-100">{likeScore}</p>
+                      <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-stone-500">
+                        {isHolding ? "Super-like…" : isSuperLiked ? "Super" : isLiked ? "Liked" : "Like"}
+                      </p>
+                    </div>
+                  </div>
+                  {reactionErrorTrackId === row.spotifyTrackId ? (
+                    <p className="mt-1 text-[11px] text-rose-300">
+                      Could not save your like.
+                    </p>
+                  ) : null}
                 </td>
                 <td className="py-3 pr-4 text-stone-300">
                   {row.commentCount ?? 0}

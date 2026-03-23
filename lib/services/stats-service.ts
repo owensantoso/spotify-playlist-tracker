@@ -16,7 +16,7 @@ import { db } from "@/lib/db";
 import { getCachedSettings } from "@/lib/services/settings-service";
 import { formatLifetimeMs, getPlaylistStartDate } from "@/lib/utils";
 
-export type ActiveSongsSortBy = "track" | "artist" | "addedBy" | "addedAt" | "age";
+export type ActiveSongsSortBy = "track" | "artist" | "addedBy" | "addedAt" | "age" | "likes";
 export type SortDirection = "asc" | "desc";
 
 export type TimeSeriesPoint = {

@@ -47,6 +47,11 @@ enum CommentModerationState {
   HIDDEN
 }
 
+enum SongReactionKind {
+  LIKE
+  SUPERLIKE
+}
+
 model AdminAccount {
   spotifyUserId         String   @id
   displayName           String?
@@ -81,6 +86,7 @@ model SpotifyUser {
   profileUrl      String?
   addedLifecycles TrackLifecycle[] @relation("LifecycleContributor")
   songComments    SongComment[]    @relation("SongCommentAuthor")
+  songReactions   SongReaction[]
   userAccount     UserAccount?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -119,8 +125,24 @@ model Track {
   explicit       Boolean?
   lifecycles     TrackLifecycle[]
   archiveEntries ArchiveEntry[]
+  reactions      SongReaction[]
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
+}
+
+model SongReaction {
+  id             String           @id @default(cuid())
+  trackSpotifyId String
+  spotifyUserId  String
+  kind           SongReactionKind
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  track          Track            @relation(fields: [trackSpotifyId], references: [spotifyTrackId], onDelete: Cascade)
+  spotifyUser    SpotifyUser      @relation(fields: [spotifyUserId], references: [spotifyUserId], onDelete: Cascade)
+
+  @@unique([trackSpotifyId, spotifyUserId])
+  @@index([trackSpotifyId, kind])
+  @@index([spotifyUserId, createdAt])
 }
 
 model TrackLifecycle {

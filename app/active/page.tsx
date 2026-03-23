@@ -3,6 +3,7 @@ import { SongTable } from "@/components/song-table";
 import { SectionCard } from "@/components/section-card";
 import { getCommentCountMap } from "@/lib/services/comment-service";
 import { getNowPlayingTrack } from "@/lib/services/now-playing-service";
+import { getTrackReactionSnapshot } from "@/lib/services/reaction-service";
 import { getSpotifyUserAvatarMap } from "@/lib/services/spotify-user-service";
 import { type ActiveSongsSortBy, type SortDirection, getActiveSongs } from "@/lib/services/stats-service";
 
@@ -16,7 +17,7 @@ type ActiveSongsPageProps = {
 
 export default async function ActiveSongsPage({ searchParams }: ActiveSongsPageProps) {
   const { q, sort, dir } = await searchParams;
-  const sortBy = sort && ["track", "artist", "addedBy", "addedAt", "age"].includes(sort) ? sort : "age";
+  const sortBy = sort && ["track", "artist", "addedBy", "addedAt", "age", "likes"].includes(sort) ? sort : "age";
   const sortDirection = dir === "asc" ? "asc" : "desc";
   const [rows, nowPlaying] = await Promise.all([
     getActiveSongs({
@@ -25,9 +26,10 @@ export default async function ActiveSongsPage({ searchParams }: ActiveSongsPageP
     }),
     getNowPlayingTrack(),
   ]);
-  const [contributorAvatars, commentCounts] = await Promise.all([
+  const [contributorAvatars, commentCounts, reactionSnapshot] = await Promise.all([
     getSpotifyUserAvatarMap(rows.map((row) => row.addedBySpotifyUserId)),
     getCommentCountMap(rows.map((row) => row.trackSpotifyId)),
+    getTrackReactionSnapshot(rows.map((row) => row.trackSpotifyId)),
   ]);
 
   return (
@@ -49,11 +51,14 @@ export default async function ActiveSongsPage({ searchParams }: ActiveSongsPageP
             contributorProfileUrl: row.addedBy?.profileUrl ?? null,
             contributorImageUrl: row.addedBySpotifyUserId ? contributorAvatars[row.addedBySpotifyUserId] ?? null : null,
             commentCount: commentCounts[row.trackSpotifyId] ?? 0,
+            likeScore: reactionSnapshot.scoreByTrackId[row.trackSpotifyId] ?? 0,
+            viewerReaction: reactionSnapshot.viewerReactionByTrackId[row.trackSpotifyId] ?? null,
             addedAt: row.spotifyAddedAt,
             firstSeenAt: row.firstSeenAt,
             spotifyUrl: row.track.spotifyUrl,
             spotifyUri: row.track.spotifyUri,
           }))}
+          reactionsFeatureAvailable={reactionSnapshot.featureAvailable}
           searchQuery={q ?? ""}
           sortBy={sortBy}
           sortDirection={sortDirection}
