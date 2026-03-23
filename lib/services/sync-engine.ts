@@ -1,6 +1,13 @@
 import "server-only";
 
-import { LifecycleStatus, PlaylistKind, Prisma, SyncRunStatus, type SyncTriggerSource } from "@prisma/client";
+import {
+  LifecycleStatus,
+  PlaylistKind,
+  Prisma,
+  PrismaClient,
+  SyncRunStatus,
+  type SyncTriggerSource,
+} from "@prisma/client";
 
 import { db } from "@/lib/db";
 import { addRomanizationToNormalizedTracks } from "@/lib/romanization";
@@ -81,7 +88,7 @@ function buildSyncDebugPayload(rawItems: Awaited<ReturnType<typeof getAllPlaylis
 }
 
 async function upsertPlaylistMetadata(
-  tx: Prisma.TransactionClient,
+  tx: Prisma.TransactionClient | PrismaClient,
   playlist: Awaited<ReturnType<typeof getPlaylist>>,
   kind: PlaylistKind,
   canWrite: boolean,
@@ -117,7 +124,7 @@ async function upsertPlaylistMetadata(
 }
 
 async function upsertNormalizedCatalog(
-  tx: Prisma.TransactionClient,
+  tx: Prisma.TransactionClient | PrismaClient,
   tracks: NormalizedPlaylistTrack[],
 ) {
   const contributors = new Map<string, { displayName: string | null; profileUrl: string | null }>();
@@ -200,6 +207,8 @@ export async function runSync(triggerSource: SyncTriggerSource) {
     const { normalized: baseNormalized, warnings: normalizationWarnings } = normalizePlaylistItems(rawItems);
     const normalized = await addRomanizationToNormalizedTracks(baseNormalized);
     const debug = buildSyncDebugPayload(rawItems);
+    await upsertNormalizedCatalog(db, normalized);
+
     const syncArtifacts = await db.$transaction(async (tx) => {
       await Promise.all([
         upsertPlaylistMetadata(tx, mainPlaylist, PlaylistKind.MAIN, false),
@@ -210,8 +219,6 @@ export async function runSync(triggerSource: SyncTriggerSource) {
           archivePlaylist.owner.id === adminAccount?.spotifyUserId || archivePlaylist.collaborative,
         ),
       ]);
-
-      await upsertNormalizedCatalog(tx, normalized);
 
       const existingActiveLifecycles = await tx.trackLifecycle.findMany({
         where: {
@@ -284,6 +291,8 @@ export async function runSync(triggerSource: SyncTriggerSource) {
         createdTracks: reconciliation.lifecyclesToCreate,
         removalsCount: reconciliation.lifecyclesToRemove.length,
       } satisfies PersistedSyncArtifacts;
+    }, {
+      timeout: 20000,
     });
 
     const archiveResult = await archiveNewTracks(syncArtifacts.createdTracks.map((track) => track.trackId));
