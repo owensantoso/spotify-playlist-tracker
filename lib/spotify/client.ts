@@ -25,6 +25,20 @@ export class SpotifyApiError extends Error {
   }
 }
 
+async function readErrorBody(response: Response) {
+  const text = await response.text();
+
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
 export async function spotifyRequest<T>(
   path: string,
   accessToken: string,
@@ -41,12 +55,7 @@ export async function spotifyRequest<T>(
   });
 
   if (!response.ok) {
-    let body: unknown;
-    try {
-      body = await response.json();
-    } catch {
-      body = await response.text();
-    }
+    const body = await readErrorBody(response);
     throw new SpotifyApiError(`Spotify API request failed for ${path}`, response.status, body);
   }
 
@@ -77,7 +86,8 @@ export async function exchangeCodeForTokens(code: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Spotify token exchange failed with status ${response.status}`);
+    const body = await readErrorBody(response);
+    throw new SpotifyApiError("Spotify token exchange failed", response.status, body);
   }
 
   return (await response.json()) as SpotifyTokenResponse;
@@ -102,7 +112,8 @@ export async function refreshAccessToken(refreshToken: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Spotify token refresh failed with status ${response.status}`);
+    const body = await readErrorBody(response);
+    throw new SpotifyApiError("Spotify token refresh failed", response.status, body);
   }
 
   return (await response.json()) as SpotifyTokenResponse;
