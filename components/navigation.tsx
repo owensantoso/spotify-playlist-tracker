@@ -2,7 +2,7 @@
 
 "use client";
 
-import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { ExternalLink, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
@@ -475,9 +475,10 @@ export function Navigation({
                     href={nowPlaying.spotifyUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="rounded-full border border-white/12 px-4 py-2 text-sm text-stone-200 transition hover:border-[--color-accent] hover:text-white"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/12 text-stone-200 transition hover:border-[--color-accent] hover:text-white"
+                    aria-label={`Open ${nowPlaying.title} in Spotify`}
                   >
-                    Open
+                    <ExternalLink className="h-4 w-4" />
                   </a>
                 ) : null}
               </div>
