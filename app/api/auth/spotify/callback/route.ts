@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 
 import { consumeOAuthState } from "@/lib/auth-state";
-import { exchangeCodeForTokens, getCurrentUser } from "@/lib/spotify/client";
+import { exchangeCodeForTokens, getCurrentUser, SpotifyApiError } from "@/lib/spotify/client";
 import { upsertAdminAccount } from "@/lib/services/admin-service";
 import { upsertSpotifyUserProfile } from "@/lib/services/user-account-service";
 import { setAdminSessionOnResponse, setViewerSessionOnResponse } from "@/lib/session";
@@ -11,6 +11,38 @@ import { absoluteUrl } from "@/lib/utils";
 function buildErrorRedirectPath(redirectTo: string, error: string) {
   const separator = redirectTo.includes("?") ? "&" : "?";
   return `${redirectTo}${separator}error=${encodeURIComponent(error)}`;
+}
+
+function formatSpotifyErrorBody(body: unknown) {
+  if (!body || typeof body !== "object") {
+    return null;
+  }
+
+  const spotifyError =
+    "error" in body && body.error && typeof body.error === "object" ? body.error : body;
+  const status =
+    "status" in spotifyError && typeof spotifyError.status === "number"
+      ? spotifyError.status
+      : null;
+  const message =
+    "message" in spotifyError && typeof spotifyError.message === "string"
+      ? spotifyError.message
+      : null;
+  const error =
+    "error" in spotifyError && typeof spotifyError.error === "string" ? spotifyError.error : null;
+
+  return [status, error, message].filter(Boolean).join(" ");
+}
+
+function describeCallbackError(error: unknown) {
+  if (error instanceof SpotifyApiError) {
+    const detail = formatSpotifyErrorBody(error.body);
+    return detail
+      ? `${error.message} (status ${error.status}: ${detail})`
+      : `${error.message} (status ${error.status})`;
+  }
+
+  return String(error);
 }
 
 export async function GET(request: NextRequest) {
@@ -70,8 +102,10 @@ export async function GET(request: NextRequest) {
 
     return response;
   } catch (error) {
+    console.error("Spotify auth callback failed", error);
+
     return NextResponse.redirect(
-      absoluteUrl(buildErrorRedirectPath(oauthState.redirectTo, String(error))),
+      absoluteUrl(buildErrorRedirectPath(oauthState.redirectTo, describeCallbackError(error))),
     );
   }
 }
