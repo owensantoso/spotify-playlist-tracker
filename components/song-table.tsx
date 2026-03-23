@@ -93,7 +93,15 @@ export function SongTable({
       <p id="active-song-empty" className="hidden text-sm text-stone-400">
         No active songs match this view yet.
       </p>
-      <table className="min-w-full text-left text-[13px]">
+      <table className="min-w-full table-fixed text-left text-[13px]">
+        <colgroup>
+          <col className="w-[92px]" />
+          <col className="w-[34%]" />
+          <col className="w-[28%]" />
+          <col className="w-[12%]" />
+          <col className="w-[12%]" />
+          <col className="w-[10%]" />
+        </colgroup>
         <thead className="text-[11px] uppercase tracking-[0.22em] text-stone-500">
           <tr>
             <th className="pb-2.5 pr-4">Artwork</th>
@@ -147,10 +155,10 @@ export function SongTable({
                 data-search={searchValue}
                 className={cn(
                   "transition",
-                  isNowPlaying && "bg-[--color-accent]/8 shadow-[inset_4px_0_0_0_rgba(243,167,92,0.95)]",
+                  isNowPlaying && "bg-[rgba(243,167,92,0.12)] shadow-[inset_0_0_0_1px_rgba(243,167,92,0.22)]",
                 )}
               >
-                <td className="py-3 pr-4">
+                <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-l border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
                   <a href={row.spotifyUrl} target="_blank" rel="noreferrer" className="block w-fit">
                     {row.artworkUrl ? (
                       <img
@@ -158,7 +166,7 @@ export function SongTable({
                         alt=""
                         className={cn(
                           "h-10 w-10 rounded-xl object-cover",
-                          isNowPlaying && "ring-2 ring-[--color-accent]/70 ring-offset-2 ring-offset-[--color-ink]",
+                          isNowPlaying && "ring-2 ring-[--color-accent] ring-offset-2 ring-offset-[--color-ink] shadow-[0_0_26px_rgba(243,167,92,0.22)]",
                         )}
                       />
                     ) : (
@@ -168,14 +176,14 @@ export function SongTable({
                     )}
                   </a>
                 </td>
-                <td className="py-3 pr-4 font-medium text-stone-100">
+                <td className={cn("py-3 pr-4 font-medium text-stone-100", isNowPlaying && "border-y border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
                   {isNowPlaying ? (
-                    <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[--color-accent]">
+                    <p className="mb-1 inline-flex rounded-full border border-[--color-accent]/45 bg-[--color-accent]/12 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[--color-accent]">
                       Now playing
                     </p>
                   ) : null}
                   {row.titleRomanized ? (
-                    <p className="mb-0.5 max-w-[22rem] font-mono text-[8px] font-normal uppercase leading-[1.15] tracking-[0.04em] text-stone-300">
+                    <p className="mb-0.5 truncate font-mono text-[8px] font-normal uppercase leading-[1.15] tracking-[0.04em] text-stone-300">
                       {row.titleRomanized}
                     </p>
                   ) : null}
@@ -188,13 +196,13 @@ export function SongTable({
                     {row.title}
                   </a>
                 </td>
-                <td className="py-3 pr-4">
+                <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
                   {row.artistsRomanized?.some((artist, index) => artist && artist !== row.artists[index]) ? (
-                    <p className="mb-0.5 max-w-[18rem] font-mono text-[8px] uppercase leading-[1.15] tracking-[0.04em] text-stone-300">
+                    <p className="mb-0.5 truncate font-mono text-[8px] uppercase leading-[1.15] tracking-[0.04em] text-stone-300">
                       {row.artistsRomanized.join(", ")}
                     </p>
                   ) : null}
-                  <div className="flex flex-wrap gap-x-1 gap-y-1">
+                  <div className="truncate">
                     {row.artists.map((artist, index) => (
                       <span key={`${row.id}-${artist}-${index}`}>
                         <a
@@ -210,7 +218,7 @@ export function SongTable({
                     ))}
                   </div>
                 </td>
-                <td className="py-3 pr-4">
+                <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
                   {row.contributor ? (
                     contributorUrl ? (
                       <a
@@ -228,8 +236,12 @@ export function SongTable({
                     "Unknown"
                   )}
                 </td>
-                <td className="py-3 pr-4">{row.addedAt ? format(row.addedAt, "MMM d, yyyy") : "Unknown"}</td>
-                <td className="py-3 pr-4">{formatRelativeDuration(getPlaylistStartDate(row.addedAt, row.firstSeenAt))}</td>
+                <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
+                  {row.addedAt ? format(row.addedAt, "MMM d, yyyy") : "Unknown"}
+                </td>
+                <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-r border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
+                  {formatRelativeDuration(getPlaylistStartDate(row.addedAt, row.firstSeenAt))}
+                </td>
               </tr>
             );
           })}

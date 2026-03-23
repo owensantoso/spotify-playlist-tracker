@@ -82,7 +82,7 @@ export async function romanizeText(value: string) {
   if (hasHan(value)) {
     const result = collapseRomanizedWhitespace(
       pinyin(value, {
-        toneType: "none",
+        toneType: "symbol",
         type: "string",
       }),
     );

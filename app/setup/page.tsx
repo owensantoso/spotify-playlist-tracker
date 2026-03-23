@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import { LogoutForm } from "@/components/logout-form";
 import { RunSyncButton } from "@/components/run-sync-button";
 import { SectionCard } from "@/components/section-card";
@@ -50,12 +48,12 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
                 <LogoutForm />
               </>
             ) : (
-              <Link
+              <a
                 href="/api/auth/spotify/login?mode=admin&next=/setup"
                 className="rounded-full bg-[--color-accent] px-4 py-2 text-sm font-semibold text-[--color-ink] transition hover:brightness-110"
               >
                 Connect Spotify
-              </Link>
+              </a>
             )}
           </div>
         </div>

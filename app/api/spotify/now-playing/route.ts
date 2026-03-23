@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { getCurrentSpotifyAuth, getNowPlayingTrack } from "@/lib/services/now-playing-service";
+import { setViewerSessionOnResponse } from "@/lib/session";
+import {
+  getCurrentSpotifyAuth,
+  getNowPlayingResult,
+} from "@/lib/services/now-playing-service";
 
 export async function GET() {
   const auth = await getCurrentSpotifyAuth();
@@ -16,9 +20,11 @@ export async function GET() {
     );
   }
 
-  const nowPlaying = await getNowPlayingTrack();
+  const { nowPlaying, refreshedViewerSession } = await getNowPlayingResult({
+    refreshViewerSession: true,
+  });
 
-  return NextResponse.json(
+  const response = NextResponse.json(
     { nowPlaying, fetchedAt: Date.now() },
     {
       headers: {
@@ -26,4 +32,10 @@ export async function GET() {
       },
     },
   );
+
+  if (refreshedViewerSession) {
+    setViewerSessionOnResponse(response, refreshedViewerSession);
+  }
+
+  return response;
 }

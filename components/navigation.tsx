@@ -5,7 +5,7 @@
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useEffectEvent, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import type { NowPlayingTrack } from "@/lib/services/now-playing-service";
 import { cn } from "@/lib/utils";
@@ -72,6 +72,7 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
   const [progressMs, setProgressMs] = useState(initialNowPlaying?.progressMs ?? 0);
   const [controlPending, setControlPending] = useState<string | null>(null);
   const [controlError, setControlError] = useState<string | null>(null);
+  const controlRequestRef = useRef(0);
 
   useEffect(() => {
     prefetchedRoutes.forEach((href) => {
@@ -176,6 +177,8 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
   }, [nowPlaying?.durationMs, nowPlaying?.isPlaying, nowPlaying?.spotifyTrackId]);
 
   async function runPlayerAction(action: "play" | "pause" | "next" | "previous") {
+    const requestId = controlRequestRef.current + 1;
+    controlRequestRef.current = requestId;
     setControlPending(action);
     setControlError(null);
 
@@ -190,28 +193,53 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
       });
 
       const payload = (await response.json().catch(() => null)) as
-        | { nowPlaying?: NowPlayingTrack | null; error?: string; status?: number }
+        | { ok?: boolean; nowPlaying?: NowPlayingTrack | null; error?: string; status?: number }
         | null;
 
       if (!response.ok) {
-        setControlError(
-          payload?.status === 403
-            ? "Reconnect Spotify to grant playback control."
-            : payload?.status === 409
-              ? "Open Spotify on a device first."
-              : payload?.error ?? "Playback control failed.",
-        );
+        if (controlRequestRef.current !== requestId) {
+          return;
+        }
+
+        if (payload?.status === 403) {
+          setControlError("Reconnect Spotify to grant playback control.");
+        } else if (payload?.status === 409) {
+          setControlError("Open Spotify on a device first.");
+        }
+        [300, 1100].forEach((delay) => {
+          window.setTimeout(() => {
+            if (controlRequestRef.current === requestId) {
+              void loadNowPlaying();
+            }
+          }, delay);
+        });
         return;
       }
 
-      syncNowPlaying(payload?.nowPlaying ?? null);
-      window.setTimeout(() => {
-        void loadNowPlaying();
-      }, 800);
+      if (controlRequestRef.current !== requestId) {
+        return;
+      }
+
+      if (payload && "nowPlaying" in payload) {
+        syncNowPlaying(payload.nowPlaying ?? null);
+      }
+      [250, 950].forEach((delay) => {
+        window.setTimeout(() => {
+          if (controlRequestRef.current === requestId) {
+            void loadNowPlaying();
+          }
+        }, delay);
+      });
     } catch {
-      setControlError("Playback control failed.");
+      if (controlRequestRef.current === requestId) {
+        setControlError("Could not sync playback state.");
+      }
     } finally {
-      setControlPending(null);
+      window.setTimeout(() => {
+        if (controlRequestRef.current === requestId) {
+          setControlPending(null);
+        }
+      }, 200);
     }
   }
 
@@ -302,12 +330,12 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
                 </button>
               </form>
             ) : (
-              <Link
+              <a
                 href={`/api/auth/spotify/login?mode=viewer&next=${encodeURIComponent(pathname || "/")}`}
                 className="rounded-full border border-[--color-accent]/45 bg-[--color-accent]/10 px-4 py-2 text-sm text-[--color-accent] transition hover:bg-[--color-accent]/20"
               >
                 Sign in with Spotify
-              </Link>
+              </a>
             )}
           </nav>
         </div>
@@ -359,8 +387,7 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
                 <button
                   type="button"
                   onClick={() => void runPlayerAction("previous")}
-                  disabled={controlPending !== null}
-                  className="rounded-full border border-white/12 p-3 text-stone-200 transition hover:border-[--color-accent] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-full border border-white/12 p-3 text-stone-200 transition hover:border-[--color-accent] hover:text-white"
                   aria-label="Previous track"
                 >
                   <SkipBack className="h-4 w-4" />
@@ -368,8 +395,7 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
                 <button
                   type="button"
                   onClick={() => void runPlayerAction(nowPlaying?.isPlaying ? "pause" : "play")}
-                  disabled={controlPending !== null}
-                  className="rounded-full border border-[--color-accent]/60 bg-[--color-accent]/10 p-3 text-[--color-accent] transition hover:bg-[--color-accent]/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-full border border-[--color-accent]/60 bg-[--color-accent]/10 p-3 text-[--color-accent] transition hover:bg-[--color-accent]/20"
                   aria-label={nowPlaying?.isPlaying ? "Pause playback" : "Resume playback"}
                 >
                   {nowPlaying?.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -377,8 +403,7 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
                 <button
                   type="button"
                   onClick={() => void runPlayerAction("next")}
-                  disabled={controlPending !== null}
-                  className="rounded-full border border-white/12 p-3 text-stone-200 transition hover:border-[--color-accent] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-full border border-white/12 p-3 text-stone-200 transition hover:border-[--color-accent] hover:text-white"
                   aria-label="Next track"
                 >
                   <SkipForward className="h-4 w-4" />
@@ -405,7 +430,7 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
               </div>
               <div className="mt-2 flex items-center justify-between gap-4 text-[11px] text-stone-400">
                 <span>{formatMs(progressMs)}</span>
-                <span>{controlError ?? (controlPending ? "Updating Spotify..." : "Live poll: 5s")}</span>
+                <span>{controlError ?? (controlPending ? "Syncing playback..." : "Live poll: 5s")}</span>
                 <span>{formatMs(nowPlaying?.durationMs ?? 0)}</span>
               </div>
             </div>
@@ -424,12 +449,12 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
                   Your Spotify account is saved in the app database so future user-specific features can build on it.
                 </p>
               </div>
-              <Link
+              <a
                 href={`/api/auth/spotify/login?mode=viewer&next=${encodeURIComponent(pathname || "/")}`}
                 className="w-fit rounded-full border border-[--color-accent]/45 bg-[--color-accent]/10 px-4 py-2 text-sm text-[--color-accent] transition hover:bg-[--color-accent]/20"
               >
                 Sign in with Spotify
-              </Link>
+              </a>
             </div>
           </div>
         )}

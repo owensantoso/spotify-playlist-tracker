@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { decryptValue, encryptValue } from "@/lib/security";
 import { refreshAccessToken, SpotifyApiError } from "@/lib/spotify/client";
 import type { SpotifyUserProfile } from "@/lib/spotify/types";
-import { upsertUserAccount } from "@/lib/services/user-account-service";
+import { upsertSpotifyUserProfile } from "@/lib/services/user-account-service";
 
 type StoredTokens = {
   accessToken: string;
@@ -29,7 +29,7 @@ export async function upsertAdminAccount(params: {
 
   const tokenExpiresAt = new Date(Date.now() + params.expiresInSeconds * 1000);
 
-  await upsertUserAccount(params);
+  await upsertSpotifyUserProfile(params.profile);
 
   return db.adminAccount.upsert({
     where: { spotifyUserId: params.profile.id },

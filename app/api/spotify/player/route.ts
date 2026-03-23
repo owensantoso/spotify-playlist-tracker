@@ -7,11 +7,12 @@ import {
   skipToPrevious,
   SpotifyApiError,
 } from "@/lib/spotify/client";
+import { setViewerSessionOnResponse } from "@/lib/session";
 import {
   getCurrentSpotifyAuth,
-  getNowPlayingTrack,
   withCurrentSpotifyAccessToken,
 } from "@/lib/services/now-playing-service";
+import type { ViewerSessionInput } from "@/lib/session";
 
 const supportedActions = ["play", "pause", "next", "previous"] as const;
 
@@ -33,7 +34,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await withCurrentSpotifyAccessToken(async (accessToken) => {
+    let refreshedViewerSession: ViewerSessionInput | null = null;
+
+    await withCurrentSpotifyAccessToken(async (accessToken, _auth, refreshedSession) => {
+      refreshedViewerSession = refreshedSession;
       if (body.action === "play") {
         await playPlayback(accessToken);
         return;
@@ -50,18 +54,35 @@ export async function POST(request: NextRequest) {
       }
 
       await skipToPrevious(accessToken);
-    });
+    }, { refreshViewerSession: true });
 
-    const nowPlaying = await getNowPlayingTrack();
-    return NextResponse.json({ nowPlaying });
+    const response = NextResponse.json({ ok: true });
+
+    if (refreshedViewerSession) {
+      setViewerSessionOnResponse(response, refreshedViewerSession);
+    }
+
+    return response;
   } catch (error) {
     if (error instanceof SpotifyApiError) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { error: "Spotify rejected the playback request", status: error.status },
         { status: error.status === 404 ? 409 : error.status },
       );
+
+      if (refreshedViewerSession) {
+        setViewerSessionOnResponse(response, refreshedViewerSession);
+      }
+
+      return response;
     }
 
-    return NextResponse.json({ error: "Playback request failed" }, { status: 500 });
+    const response = NextResponse.json({ error: "Playback request failed" }, { status: 500 });
+
+    if (refreshedViewerSession) {
+      setViewerSessionOnResponse(response, refreshedViewerSession);
+    }
+
+    return response;
   }
 }

@@ -4,9 +4,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { consumeOAuthState } from "@/lib/auth-state";
 import { exchangeCodeForTokens, getCurrentUser } from "@/lib/spotify/client";
 import { upsertAdminAccount } from "@/lib/services/admin-service";
-import { upsertUserAccount } from "@/lib/services/user-account-service";
+import { upsertSpotifyUserProfile } from "@/lib/services/user-account-service";
 import { setAdminSessionOnResponse, setViewerSessionOnResponse } from "@/lib/session";
 import { absoluteUrl } from "@/lib/utils";
+
+function buildErrorRedirectPath(redirectTo: string, error: string) {
+  const separator = redirectTo.includes("?") ? "&" : "?";
+  return `${redirectTo}${separator}error=${encodeURIComponent(error)}`;
+}
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
@@ -36,7 +41,7 @@ export async function GET(request: NextRequest) {
     if (oauthState.intent === "admin") {
       await upsertAdminAccount(accountParams);
     } else {
-      await upsertUserAccount(accountParams);
+      await upsertSpotifyUserProfile(profile);
     }
 
     const redirectTarget =
@@ -44,7 +49,12 @@ export async function GET(request: NextRequest) {
         ? `${oauthState.redirectTo}${oauthState.redirectTo.includes("?") ? "&" : "?"}connected=1`
         : oauthState.redirectTo;
     const response = NextResponse.redirect(absoluteUrl(redirectTarget));
-    setViewerSessionOnResponse(response, profile.id);
+    setViewerSessionOnResponse(response, {
+      spotifyUserId: profile.id,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? "",
+      tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+    });
 
     if (oauthState.intent === "admin") {
       setAdminSessionOnResponse(response, profile.id);
@@ -60,6 +70,8 @@ export async function GET(request: NextRequest) {
 
     return response;
   } catch (error) {
-    return NextResponse.redirect(absoluteUrl(`/setup?error=${encodeURIComponent(String(error))}`));
+    return NextResponse.redirect(
+      absoluteUrl(buildErrorRedirectPath(oauthState.redirectTo, String(error))),
+    );
   }
 }
