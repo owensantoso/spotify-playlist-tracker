@@ -1,0 +1,158 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PlaylistKind {
+  MAIN
+  ARCHIVE
+}
+
+enum LifecycleStatus {
+  ACTIVE
+  REMOVED
+}
+
+enum SyncRunStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
+enum SyncTriggerSource {
+  MANUAL
+  GITHUB_ACTIONS
+  CRON
+  SETUP
+}
+
+model AdminAccount {
+  spotifyUserId         String   @id
+  displayName           String?
+  profileUrl            String?
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String
+  tokenExpiresAt        DateTime
+  grantedScopes         String[]
+  lastAuthenticatedAt   DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model SpotifyUser {
+  spotifyUserId   String           @id
+  displayName     String?
+  profileUrl      String?
+  addedLifecycles TrackLifecycle[] @relation("LifecycleContributor")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model Playlist {
+  spotifyPlaylistId String            @id
+  name              String
+  kind              PlaylistKind
+  ownerSpotifyUserId String?
+  ownerDisplayName  String?
+  isPublic          Boolean           @default(false)
+  collaborative     Boolean           @default(false)
+  canRead           Boolean           @default(false)
+  canWrite          Boolean           @default(false)
+  snapshotId        String?
+  lastValidatedAt   DateTime?
+  lifecycles        TrackLifecycle[]
+  archiveEntries    ArchiveEntry[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model Track {
+  spotifyTrackId String           @id
+  name           String
+  nameRomanized  String?
+  artistNames    String[]
+  artistNamesRomanized String[]   @default([])
+  artistSpotifyUrls String[]      @default([])
+  albumName      String?
+  artworkUrl     String?
+  spotifyUrl     String
+  spotifyUri     String
+  durationMs     Int?
+  explicit       Boolean?
+  lifecycles     TrackLifecycle[]
+  archiveEntries ArchiveEntry[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model TrackLifecycle {
+  id                  String           @id @default(cuid())
+  playlistSpotifyId   String
+  trackSpotifyId      String
+  addedBySpotifyUserId String?
+  spotifyAddedAt      DateTime?
+  firstSeenAt         DateTime
+  lastSeenAt          DateTime
+  removedObservedAt   DateTime?
+  status              LifecycleStatus  @default(ACTIVE)
+  matchFingerprint    String
+  occurrenceOrdinal   Int
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  playlist            Playlist         @relation(fields: [playlistSpotifyId], references: [spotifyPlaylistId], onDelete: Cascade)
+  track               Track            @relation(fields: [trackSpotifyId], references: [spotifyTrackId], onDelete: Cascade)
+  addedBy             SpotifyUser?     @relation("LifecycleContributor", fields: [addedBySpotifyUserId], references: [spotifyUserId], onDelete: SetNull)
+
+  @@index([playlistSpotifyId, status])
+  @@index([playlistSpotifyId, matchFingerprint, occurrenceOrdinal])
+  @@index([trackSpotifyId, status])
+}
+
+model ArchiveEntry {
+  playlistSpotifyId String
+  trackSpotifyId    String
+  createdAt         DateTime @default(now())
+  playlist          Playlist @relation(fields: [playlistSpotifyId], references: [spotifyPlaylistId], onDelete: Cascade)
+  track             Track    @relation(fields: [trackSpotifyId], references: [spotifyTrackId], onDelete: Cascade)
+
+  @@id([playlistSpotifyId, trackSpotifyId])
+}
+
+model SyncRun {
+  id                       String            @id @default(cuid())
+  triggerSource            SyncTriggerSource
+  status                   SyncRunStatus     @default(RUNNING)
+  playlistSpotifyId        String
+  startedAt                DateTime
+  completedAt              DateTime?
+  fetchedItemsCount        Int               @default(0)
+  activeItemsCount         Int               @default(0)
+  additionsCount           Int               @default(0)
+  removalsCount            Int               @default(0)
+  archiveQueuedCount       Int               @default(0)
+  archiveSuccessCount      Int               @default(0)
+  archiveFailureCount      Int               @default(0)
+  notificationSuccessCount Int               @default(0)
+  notificationFailureCount Int               @default(0)
+  warnings                 String[]
+  errors                   String[]
+}
+
+model AppSettings {
+  id                     Int      @id @default(1)
+  mainPlaylistId         String
+  archivePlaylistId      String
+  syncIntervalMinutes    Int      @default(60)
+  discordWebhookUrl      String?
+  notifyOnAdditions      Boolean  @default(false)
+  notifyOnRemovals       Boolean  @default(false)
+  batchedNotifications   Boolean  @default(true)
+  archiveDedupeEnabled   Boolean  @default(true)
+  publicDashboard        Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}

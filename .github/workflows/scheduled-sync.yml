@@ -1,0 +1,18 @@
+name: Scheduled Sync
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger protected sync endpoint
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${{ secrets.APP_URL }}/api/cron/sync" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "X-Trigger-Source: github_actions" \
+            -H "Content-Type: application/json"
