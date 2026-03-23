@@ -123,6 +123,26 @@ export function SongToolsMenu({
               </a>
             ))}
           </div>
+          <div className="mt-2 border-t border-white/8 pt-2">
+            <p className="px-2 pb-1 font-mono text-[9px] uppercase tracking-[0.18em] text-stone-500">
+              Lyrics search
+            </p>
+            {[
+              { label: "Lyrics", term: "lyrics" },
+              { label: "Pinyin lyrics", term: "pinyin lyrics" },
+              { label: "Romaji lyrics", term: "romaji lyrics" },
+            ].map((item) => (
+              <a
+                key={item.label}
+                href={getGoogleSearchUrl([title, artistLabel, item.term])}
+                target="_blank"
+                rel="noreferrer"
+                className="flex w-full items-center justify-between rounded-xl px-2 py-2 text-left text-sm text-stone-200 transition hover:bg-white/5 hover:text-white"
+              >
+                <span>{item.label}</span>
+              </a>
+            ))}
+          </div>
         </div>
       ) : null}
     </div>
