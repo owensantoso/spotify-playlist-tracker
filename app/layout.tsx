@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 
 import { Navigation } from "@/components/navigation";
+import { getCommentTrackPayload } from "@/lib/services/comment-service";
 import { getNowPlayingTrack } from "@/lib/services/now-playing-service";
 import { getMainPlaylistHeader } from "@/lib/services/stats-service";
 import "./globals.css";
@@ -33,6 +34,14 @@ export default async function RootLayout({
     getMainPlaylistHeader(),
     getNowPlayingTrack(),
   ]);
+  const initialComments = nowPlaying?.spotifyTrackId
+    ? await getCommentTrackPayload(nowPlaying.spotifyTrackId)
+    : {
+        featureAvailable: true,
+        version: "0",
+        markers: [],
+        threads: [],
+      };
 
   return (
     <html
@@ -45,6 +54,7 @@ export default async function RootLayout({
             playlistName={playlistHeader.name}
             playlistUrl={playlistHeader.spotifyUrl}
             nowPlaying={nowPlaying}
+            initialComments={initialComments}
           />
           <main className="pb-16">{children}</main>
         </div>

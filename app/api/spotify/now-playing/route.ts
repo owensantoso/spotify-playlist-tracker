@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { setViewerSessionOnResponse } from "@/lib/session";
+import { getCommentTrackPayload } from "@/lib/services/comment-service";
 import {
   getCurrentSpotifyAuth,
   getNowPlayingResult,
@@ -23,9 +24,18 @@ export async function GET() {
   const { nowPlaying, refreshedViewerSession } = await getNowPlayingResult({
     refreshViewerSession: true,
   });
+  const comments =
+    nowPlaying?.spotifyTrackId
+      ? await getCommentTrackPayload(nowPlaying.spotifyTrackId)
+      : {
+          featureAvailable: true,
+          version: "0",
+          markers: [],
+          threads: [],
+        };
 
   const response = NextResponse.json(
-    { nowPlaying, fetchedAt: Date.now() },
+    { nowPlaying, comments, fetchedAt: Date.now() },
     {
       headers: {
         "Cache-Control": "no-store",

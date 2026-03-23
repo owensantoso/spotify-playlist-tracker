@@ -62,6 +62,13 @@ type ReadResult<T> = {
   data: T;
 };
 
+export type CommentTrackPayload = {
+  featureAvailable: boolean;
+  version: string;
+  markers: CommentMarker[];
+  threads: CommentThread[];
+};
+
 type SpotifyPlayableTrack = SpotifyTrack & {
   id: string;
 };
@@ -270,6 +277,20 @@ export async function getCommentThreads(trackSpotifyId: string): Promise<ReadRes
     }
     throw error;
   }
+}
+
+export async function getCommentTrackPayload(trackSpotifyId: string): Promise<CommentTrackPayload> {
+  const [markers, threads] = await Promise.all([
+    getCommentMarkers(trackSpotifyId),
+    getCommentThreads(trackSpotifyId),
+  ]);
+
+  return {
+    featureAvailable: markers.featureAvailable && threads.featureAvailable,
+    version: threads.version !== "0" ? threads.version : markers.version,
+    markers: markers.data,
+    threads: threads.data,
+  };
 }
 
 export async function getCommentCountMap(trackSpotifyIds: Array<string | null | undefined>) {

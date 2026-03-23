@@ -6,6 +6,7 @@ import { LoaderCircle, MessageCirclePlus, MessagesSquare, X } from "lucide-react
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import type { CommentTrackPayload } from "@/lib/services/comment-service";
 import type { NowPlayingTrack } from "@/lib/services/now-playing-service";
 import { cn } from "@/lib/utils";
 
@@ -16,50 +17,8 @@ type AuthStatus = {
   spotifyUserId: string | null;
 };
 
-type MarkerAuthor = {
-  spotifyUserId: string;
-  displayName: string | null;
-  imageUrl: string | null;
-  profileUrl: string | null;
-};
-
-type CommentMarker = {
-  markerBucketSecond: number;
-  timestampMsRepresentative: number;
-  commentCount: number;
-  threadCount: number;
-  authors: MarkerAuthor[];
-  previewComment: string;
-  topLevelCommentIds: string[];
-};
-
-type CommentThread = {
-  id: string;
-  trackSpotifyId: string;
-  threadRootId: string;
-  parentCommentId: string | null;
-  timestampMs: number;
-  markerBucketSecond: number;
-  body: string;
-  createdAt: string;
-  updatedAt: string;
-  author: MarkerAuthor;
-  replies: CommentThread[];
-};
-
-type MarkerResponse = {
-  featureAvailable: boolean;
-  trackId: string;
-  version: string;
-  markers: CommentMarker[];
-};
-
-type ThreadsResponse = {
-  featureAvailable: boolean;
-  trackId: string;
-  version: string;
-  threads: CommentThread[];
-};
+type MarkerAuthor = CommentTrackPayload["markers"][number]["authors"][number];
+type CommentThread = CommentTrackPayload["threads"][number];
 
 type CommentMutationResponse = {
   ok?: boolean;
@@ -73,6 +32,7 @@ type NowPlayingCommentsProps = {
   authStatus: AuthStatus;
   controlStatusLabel: string;
   onRefreshNowPlaying: () => Promise<NowPlayingTrack | null>;
+  commentPayload: CommentTrackPayload;
 };
 
 function formatMs(ms: number) {
@@ -187,14 +147,9 @@ export function NowPlayingComments({
   authStatus,
   controlStatusLabel,
   onRefreshNowPlaying,
+  commentPayload,
 }: NowPlayingCommentsProps) {
   const pathname = usePathname();
-  const [markers, setMarkers] = useState<CommentMarker[]>([]);
-  const [threads, setThreads] = useState<CommentThread[]>([]);
-  const [markersFeatureAvailable, setMarkersFeatureAvailable] = useState(true);
-  const [threadsFeatureAvailable, setThreadsFeatureAvailable] = useState(true);
-  const [markersLoading, setMarkersLoading] = useState(false);
-  const [threadsLoading, setThreadsLoading] = useState(false);
   const [showAllComments, setShowAllComments] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [commentDraft, setCommentDraft] = useState("");
@@ -210,49 +165,10 @@ export function NowPlayingComments({
 
   const trackId = track?.spotifyTrackId ?? null;
 
-  async function loadMarkers(nextTrackId: string) {
-    setMarkersLoading(true);
-
-    try {
-      const response = await fetch(`/api/comments/markers?trackId=${encodeURIComponent(nextTrackId)}`, {
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        return;
-      }
-
-      const payload = (await response.json()) as MarkerResponse;
-      setMarkersFeatureAvailable(payload.featureAvailable);
-      setMarkers(payload.markers);
-    } catch {
-      // Preserve previous markers during transient errors.
-    } finally {
-      setMarkersLoading(false);
-    }
-  }
-
-  async function loadThreads(nextTrackId: string) {
-    setThreadsLoading(true);
-
-    try {
-      const response = await fetch(`/api/comments/threads?trackId=${encodeURIComponent(nextTrackId)}`, {
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        return;
-      }
-
-      const payload = (await response.json()) as ThreadsResponse;
-      setThreadsFeatureAvailable(payload.featureAvailable);
-      setThreads(payload.threads);
-    } catch {
-      // Preserve previous threads during transient errors.
-    } finally {
-      setThreadsLoading(false);
-    }
-  }
+  const markers = commentPayload.markers;
+  const threads = commentPayload.threads;
+  const markersFeatureAvailable = commentPayload.featureAvailable;
+  const threadsFeatureAvailable = commentPayload.featureAvailable;
 
   useEffect(() => {
     setOpenMarkerBucket(null);
@@ -264,22 +180,9 @@ export function NowPlayingComments({
     setPlaybackSessionKey((current) => current + 1);
 
     if (!trackId) {
-      setMarkers([]);
-      setThreads([]);
       return;
     }
-
-    void loadMarkers(trackId);
-    if (showAllComments) {
-      void loadThreads(trackId);
-    }
-  }, [showAllComments, trackId]);
-
-  useEffect(() => {
-    if (trackId && showAllComments) {
-      void loadThreads(trackId);
-    }
-  }, [showAllComments, trackId]);
+  }, [trackId]);
 
   useEffect(() => {
     if (progressMs + 1_500 < progressRef.current) {
@@ -343,7 +246,7 @@ export function NowPlayingComments({
 
   const popupMarker = markers.find((marker) => marker.markerBucketSecond === popupBucket) ?? null;
   const trackDurationMs = track?.durationMs ?? 0;
-  const activeCommentBucket = linkedBucket ?? openMarkerBucket;
+  const activeCommentBucket = linkedBucket ?? popupBucket ?? openMarkerBucket;
 
   function handleBucketEnter(bucket: number) {
     setLinkedBucket(bucket);
@@ -434,12 +337,7 @@ export function NowPlayingComments({
           if (retryResponse.ok) {
             setCommentDraft("");
             setComposerOpen(false);
-            if (trackId) {
-              await loadMarkers(trackId);
-              if (showAllComments) {
-                await loadThreads(trackId);
-              }
-            }
+            await onRefreshNowPlaying();
             return;
           }
 
@@ -454,12 +352,7 @@ export function NowPlayingComments({
 
       setCommentDraft("");
       setComposerOpen(false);
-      if (trackId) {
-        await loadMarkers(trackId);
-        if (showAllComments) {
-          await loadThreads(trackId);
-        }
-      }
+      await onRefreshNowPlaying();
     } catch {
       setSubmitError("Could not save your comment.");
     } finally {
@@ -492,6 +385,7 @@ export function NowPlayingComments({
                   Math.min(100, (marker.timestampMsRepresentative / trackDurationMs) * 100),
                 );
                 const isOpen = marker.markerBucketSecond === openMarkerBucket;
+                const isActive = activeCommentBucket === marker.markerBucketSecond;
                 const labelBase =
                   marker.authors[0]?.displayName ?? marker.authors[0]?.spotifyUserId ?? "Unknown";
 
@@ -499,7 +393,7 @@ export function NowPlayingComments({
                   <button
                     key={marker.markerBucketSecond}
                     type="button"
-                    className="absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full outline-none"
+                    className="absolute top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full outline-none transition-transform duration-150"
                     style={{ left: `${left}%` }}
                     onMouseEnter={() => handleBucketEnter(marker.markerBucketSecond)}
                     onMouseLeave={() => handleBucketLeave(marker.markerBucketSecond)}
@@ -515,32 +409,45 @@ export function NowPlayingComments({
                     aria-label={`Comment at ${formatMs(marker.timestampMsRepresentative)} by ${labelBase}`}
                   >
                     <span className="relative inline-flex items-center justify-center">
-                      <span className="absolute top-[16px] h-3 w-[2px] rounded-full bg-[--color-accent]/70" />
-                      <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full border border-[--color-accent]/45 bg-[rgba(18,26,21,0.96)] px-1.5 shadow-[0_6px_14px_rgba(0,0,0,0.28)]">
+                      <span
+                        className={cn(
+                          "absolute top-[12px] h-2.5 w-[2px] rounded-full bg-[--color-accent]/65 transition-all duration-150",
+                          isActive && "bg-[--color-accent] shadow-[0_0_12px_rgba(243,167,92,0.45)]",
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-[--color-accent]/45 bg-[rgba(18,26,21,0.96)] px-1 shadow-[0_5px_12px_rgba(0,0,0,0.24)] transition-all duration-150",
+                          isActive && "scale-110 border-[--color-accent] shadow-[0_8px_20px_rgba(243,167,92,0.25)]",
+                        )}
+                      >
                         <span className="flex -space-x-1">
                           {marker.authors.slice(0, 3).map((author) => (
                             <Avatar
                               key={`${marker.markerBucketSecond}-${author.spotifyUserId}`}
                               author={author}
-                              sizeClassName="h-4 w-4"
+                              sizeClassName="h-3 w-3"
                             />
                           ))}
                         </span>
                         {marker.threadCount > 3 ? (
-                          <span className="ml-1 font-mono text-[9px] text-stone-300">
+                          <span className="ml-1 font-mono text-[8px] text-stone-300">
                             +{marker.threadCount - 3}
                           </span>
                         ) : null}
                       </span>
                     </span>
                     {isOpen ? (
-                      <span className="absolute left-1/2 top-[34px] z-20 w-64 -translate-x-1/2 rounded-2xl border border-white/10 bg-[rgba(14,22,18,0.98)] p-3 text-left shadow-[0_14px_30px_rgba(0,0,0,0.35)]">
+                      <span className="absolute left-1/2 top-[28px] z-20 w-64 -translate-x-1/2 text-left">
+                        <span className="absolute left-1/2 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-l border-t border-white/10 bg-[rgba(14,22,18,0.98)]" />
+                        <span className="relative block rounded-2xl border border-white/10 bg-[rgba(14,22,18,0.98)] p-3 shadow-[0_14px_30px_rgba(0,0,0,0.35)]">
                         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[--color-accent]">
                           {formatMs(marker.timestampMsRepresentative)}
                         </span>
                         <span className="mt-1 block text-sm text-stone-100">{marker.previewComment}</span>
                         <span className="mt-2 block text-[11px] text-stone-400">
                           {marker.threadCount} comment thread{marker.threadCount === 1 ? "" : "s"}
+                        </span>
                         </span>
                       </span>
                     ) : null}
@@ -673,11 +580,6 @@ export function NowPlayingComments({
           <div className="mt-3 rounded-3xl border border-white/10 bg-black/15 p-3">
             {!track ? (
               <p className="text-sm text-stone-400">No active track is available for comments right now.</p>
-            ) : threadsLoading ? (
-              <div className="flex items-center gap-2 text-sm text-stone-400">
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-                Loading comments...
-              </div>
             ) : threads.length ? (
               <div className="space-y-3">
                 {threads.map((thread) => (
@@ -695,11 +597,6 @@ export function NowPlayingComments({
                 No comments yet for this track. Be the first one to pin a moment.
               </p>
             )}
-          </div>
-        ) : markersLoading && track ? (
-          <div className="flex items-center gap-2 text-sm text-stone-400">
-            <LoaderCircle className="h-4 w-4 animate-spin" />
-            Loading comment markers...
           </div>
         ) : null}
       </div>

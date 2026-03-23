@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { NowPlayingComments } from "@/components/now-playing-comments";
+import type { CommentTrackPayload } from "@/lib/services/comment-service";
 import type { NowPlayingTrack } from "@/lib/services/now-playing-service";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +16,7 @@ type NavigationProps = {
   playlistName: string;
   playlistUrl: string | null;
   nowPlaying: NowPlayingTrack | null;
+  initialComments?: CommentTrackPayload;
 };
 
 type AuthStatus = {
@@ -26,6 +28,7 @@ type AuthStatus = {
 
 type NowPlayingResponse = {
   nowPlaying: NowPlayingTrack | null;
+  comments: CommentTrackPayload;
   fetchedAt: number;
 };
 
@@ -50,7 +53,12 @@ function isCurrentPath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPlaying }: NavigationProps) {
+export function Navigation({
+  playlistName,
+  playlistUrl,
+  nowPlaying: initialNowPlaying,
+  initialComments,
+}: NavigationProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [authStatus, setAuthStatus] = useState<AuthStatus>({
@@ -60,6 +68,14 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
     spotifyUserId: null,
   });
   const [nowPlaying, setNowPlaying] = useState<NowPlayingTrack | null>(initialNowPlaying);
+  const [commentPayload, setCommentPayload] = useState<CommentTrackPayload>(
+    initialComments ?? {
+      featureAvailable: true,
+      version: "0",
+      markers: [],
+      threads: [],
+    },
+  );
   const [progressMs, setProgressMs] = useState(initialNowPlaying?.progressMs ?? 0);
   const [controlPending, setControlPending] = useState<string | null>(null);
   const [controlError, setControlError] = useState<string | null>(null);
@@ -116,6 +132,12 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
 
       if (response.status === 401) {
         syncNowPlaying(null);
+        setCommentPayload({
+          featureAvailable: true,
+          version: "0",
+          markers: [],
+          threads: [],
+        });
         return null;
       }
 
@@ -125,6 +147,7 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
 
       const payload = (await response.json()) as NowPlayingResponse;
       syncNowPlaying(payload.nowPlaying);
+      setCommentPayload(payload.comments);
       return payload.nowPlaying;
     } catch {
       // Keep the previous state during transient polling failures.
@@ -410,8 +433,9 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
               track={nowPlaying}
               progressMs={progressMs}
               authStatus={authStatus}
-              controlStatusLabel={controlError ?? (controlPending ? "Syncing playback..." : "Live poll: 5s")}
+              controlStatusLabel={controlError ?? (controlPending ? "Syncing playback..." : "")}
               onRefreshNowPlaying={loadNowPlaying}
+              commentPayload={commentPayload}
             />
           </div>
         ) : (
@@ -441,6 +465,7 @@ export function Navigation({ playlistName, playlistUrl, nowPlaying: initialNowPl
               authStatus={authStatus}
               controlStatusLabel="Read-only"
               onRefreshNowPlaying={loadNowPlaying}
+              commentPayload={commentPayload}
             />
           </div>
         )}
