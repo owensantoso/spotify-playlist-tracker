@@ -41,6 +41,8 @@ type NowPlayingCommentsProps = {
   controlStatusLabel: string;
   onRefreshNowPlaying: () => Promise<NowPlayingTrack | null>;
   commentPayload: CommentTrackPayload;
+  interactionEnabled?: boolean;
+  interactionDisabledLabel?: string;
 };
 
 type FloatingCommentNotice = {
@@ -636,6 +638,8 @@ export function NowPlayingComments({
   controlStatusLabel,
   onRefreshNowPlaying,
   commentPayload,
+  interactionEnabled = true,
+  interactionDisabledLabel = "Play this song on Spotify to comment or jump to markers.",
 }: NowPlayingCommentsProps) {
   const pathname = usePathname();
   const [localCommentPayload, setLocalCommentPayload] = useState(commentPayload);
@@ -777,6 +781,7 @@ export function NowPlayingComments({
   const activeCommentBucket = linkedBucket ?? popupBucket ?? openMarkerBucket;
   const footerStatusLabel =
     seekError ??
+    ((!interactionEnabled && track) ? interactionDisabledLabel : "") ??
     (controlStatusLabel === "Syncing playback..." || controlStatusLabel === "Read-only"
       ? controlStatusLabel
       : "");
@@ -792,7 +797,7 @@ export function NowPlayingComments({
   }
 
   async function handleSeek(timestampMs: number, bucket: number) {
-    if (!track || seekPending) {
+    if (!track || seekPending || !interactionEnabled) {
       return;
     }
 
@@ -1133,7 +1138,7 @@ export function NowPlayingComments({
                     onFocus={() => handleBucketEnter(marker.markerBucketSecond)}
                     onClick={() => void handleSeek(marker.timestampMsRepresentative, marker.markerBucketSecond)}
                     aria-label={`Comment at ${formatMs(marker.timestampMsRepresentative)} by ${labelBase}`}
-                    disabled={seekPending}
+                    disabled={seekPending || !interactionEnabled}
                   >
                     <span className="relative inline-flex items-center justify-center">
                       <span
@@ -1199,7 +1204,9 @@ export function NowPlayingComments({
             </p>
             <p className="text-sm text-stone-300">
               {track
-                ? "Attach comments to the exact moment this song is playing."
+                ? interactionEnabled
+                  ? "Attach comments to the exact moment this song is playing."
+                  : "Play this song on Spotify to leave timestamped comments."
                 : "Start playback on Spotify to comment on the current track."}
             </p>
           </div>
@@ -1211,7 +1218,7 @@ export function NowPlayingComments({
                   setComposerOpen((current) => !current);
                   setSubmitError(null);
                 }}
-                disabled={!track}
+                disabled={!track || !interactionEnabled}
                 className="inline-flex items-center gap-2 rounded-full border border-[--color-accent]/45 bg-[--color-accent]/10 px-4 py-2 text-sm text-[--color-accent] transition hover:bg-[--color-accent]/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <MessageCirclePlus className="h-4 w-4" />

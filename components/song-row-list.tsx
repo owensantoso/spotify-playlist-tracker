@@ -3,6 +3,7 @@
 "use client";
 
 import { format } from "date-fns";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { SpotifyUserLink } from "@/components/spotify-user-link";
@@ -97,14 +98,12 @@ export function SongRowList({
                 {item.titleRomanized ? (
                   <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-stone-400">{item.titleRomanized}</p>
                 ) : null}
-                <a
-                  href={item.spotifyUrl}
-                  target="_blank"
-                  rel="noreferrer"
+                <Link
+                  href={`/songs/${encodeURIComponent(item.spotifyTrackId)}`}
                   className="text-sm font-medium text-stone-100 transition hover:text-[--color-accent] md:text-[15px]"
                 >
                   {item.title}
-                </a>
+                </Link>
                 {item.artistsRomanized?.some((artist, index) => artist && artist !== item.artists[index]) ? (
                   <p className="font-mono text-[9px] text-stone-400">
                     {item.artistsRomanized.map((artist, index) => (

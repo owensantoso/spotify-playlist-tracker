@@ -545,9 +545,12 @@ export function SongTable({
                         {row.titleRomanized}
                       </p>
                     ) : null}
-                    <p className="min-w-0 truncate transition group-hover/song:text-white">
+                    <Link
+                      href={`/songs/${encodeURIComponent(row.spotifyTrackId)}`}
+                      className="block min-w-0 truncate transition hover:text-[--color-accent] group-hover/song:text-white"
+                    >
                       {row.title}
-                    </p>
+                    </Link>
                   </div>
                   {playErrorTrackId === row.spotifyTrackId ? (
                     <p className="mt-1 text-[11px] text-rose-300">
