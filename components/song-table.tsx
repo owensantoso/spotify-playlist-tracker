@@ -317,17 +317,17 @@ export function SongTable({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-hidden">
       <p id="active-song-empty" className="hidden text-sm text-stone-400">
         No active songs match this view yet.
       </p>
-      <table className="min-w-full table-separate border-spacing-x-3 border-spacing-y-2 text-left text-[13px]">
+      <table className="min-w-full table-separate border-spacing-y-2 text-left text-[13px]">
         <colgroup>
-          <col className="w-[11%]" />
+          <col className="w-[12%]" />
           <col className="w-[92px]" />
-          <col className="w-[26%]" />
-          <col className="w-[21%]" />
-          <col className="w-[11%]" />
+          <col className="w-[24%]" />
+          <col className="w-[20%]" />
+          <col className="w-[12%]" />
           <col className="w-[8%]" />
           <col className="w-[8%]" />
           <col className="w-[10%]" />
@@ -400,6 +400,15 @@ export function SongTable({
             const isHolding = holdTrackId === row.spotifyTrackId;
             const isSuperLiked = currentReaction === "SUPERLIKE";
             const isLiked = currentReaction === "LIKE";
+            const centerCellClass = isNowPlaying
+              ? "bg-[rgba(243,167,92,0.055)]"
+              : "group-hover/song:bg-white/[0.035]";
+            const leftEdgeCellClass = isNowPlaying
+              ? "rounded-l-[1.4rem] bg-[linear-gradient(90deg,rgba(243,167,92,0.14),rgba(243,167,92,0.055))] pl-4"
+              : "rounded-l-[1.4rem] group-hover/song:bg-[linear-gradient(90deg,rgba(255,255,255,0.045),rgba(255,255,255,0.035))] pl-4";
+            const rightEdgeCellClass = isNowPlaying
+              ? "rounded-r-[1.4rem] bg-[linear-gradient(90deg,rgba(243,167,92,0.055),rgba(106,161,109,0.12))] pr-4"
+              : "rounded-r-[1.4rem] group-hover/song:bg-[linear-gradient(90deg,rgba(255,255,255,0.035),rgba(255,255,255,0.045))] pr-4";
 
             return (
               <tr
@@ -415,9 +424,7 @@ export function SongTable({
                 <td
                   className={cn(
                     "py-3 pr-4",
-                    isNowPlaying
-                      ? "rounded-l-[1.45rem] border border-[rgba(243,167,92,0.14)] bg-[linear-gradient(90deg,rgba(243,167,92,0.14),rgba(243,167,92,0.07))] pl-5"
-                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                    leftEdgeCellClass,
                   )}
                 >
                   <div className="flex min-w-[7.5rem] items-center gap-2">
@@ -432,9 +439,9 @@ export function SongTable({
                       className={cn(
                         "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition duration-200 disabled:opacity-60",
                         isSuperLiked
-                          ? "border-[--color-accent] bg-[--color-accent]/18 text-[--color-accent]"
+                          ? "border-[#ffd76a] bg-[#ffd76a]/16 text-[#ffe38f] shadow-[0_0_22px_rgba(255,215,106,0.18)]"
                           : isLiked
-                            ? "border-emerald-400/60 bg-emerald-400/12 text-emerald-200"
+                            ? "border-emerald-400/45 bg-emerald-400/8 text-emerald-200"
                             : "border-white/10 text-stone-400 hover:border-[--color-accent]/50 hover:text-stone-100",
                         isHolding && "scale-110 animate-pulse shadow-[0_0_26px_rgba(243,167,92,0.28)]",
                       )}
@@ -458,9 +465,7 @@ export function SongTable({
                 <td
                   className={cn(
                     "py-3 pr-4",
-                    isNowPlaying
-                      ? "border-y border-[rgba(243,167,92,0.14)] bg-[rgba(243,167,92,0.055)]"
-                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                    centerCellClass,
                   )}
                 >
                   <div className="relative w-fit">
@@ -517,9 +522,7 @@ export function SongTable({
                 <td
                   className={cn(
                     "relative py-3 pr-4 font-medium text-stone-100",
-                    isNowPlaying
-                      ? "border-y border-[rgba(243,167,92,0.14)] bg-[rgba(243,167,92,0.055)]"
-                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                    centerCellClass,
                   )}
                 >
                   {isNowPlaying ? (
@@ -551,9 +554,7 @@ export function SongTable({
                 <td
                   className={cn(
                     "py-3 pr-4",
-                    isNowPlaying
-                      ? "border-y border-[rgba(243,167,92,0.14)] bg-[rgba(243,167,92,0.055)]"
-                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                    centerCellClass,
                   )}
                 >
                   {row.artistsRomanized?.some((artist, index) => artist && artist !== row.artists[index]) ? (
@@ -580,9 +581,7 @@ export function SongTable({
                 <td
                   className={cn(
                     "py-3 pr-4",
-                    isNowPlaying
-                      ? "border-y border-[rgba(243,167,92,0.14)] bg-[rgba(243,167,92,0.055)]"
-                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                    centerCellClass,
                   )}
                 >
                   <SpotifyUserLink
@@ -598,9 +597,7 @@ export function SongTable({
                 <td
                   className={cn(
                     "py-3 pr-4",
-                    isNowPlaying
-                      ? "border-y border-[rgba(243,167,92,0.14)] bg-[rgba(243,167,92,0.055)]"
-                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                    centerCellClass,
                   )}
                 >
                   {row.addedAt ? format(row.addedAt, "MMM d, yyyy") : "Unknown"}
@@ -608,9 +605,7 @@ export function SongTable({
                 <td
                   className={cn(
                     "py-3 pr-4 text-stone-300",
-                    isNowPlaying
-                      ? "border-y border-[rgba(243,167,92,0.14)] bg-[rgba(243,167,92,0.055)]"
-                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                    centerCellClass,
                   )}
                 >
                   {row.commentCount ?? 0}
@@ -618,9 +613,7 @@ export function SongTable({
                 <td
                   className={cn(
                     "py-3 pr-4",
-                    isNowPlaying
-                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
-                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                    centerCellClass,
                   )}
                 >
                   {formatRelativeDuration(getPlaylistStartDate(row.addedAt, row.firstSeenAt))}
@@ -628,9 +621,7 @@ export function SongTable({
                 <td
                   className={cn(
                     "py-3 text-right",
-                    isNowPlaying
-                      ? "rounded-r-[1.45rem] border border-[rgba(243,167,92,0.14)] bg-[linear-gradient(90deg,rgba(243,167,92,0.055),rgba(106,161,109,0.12))] pr-5"
-                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                    rightEdgeCellClass,
                   )}
                 >
                   <a

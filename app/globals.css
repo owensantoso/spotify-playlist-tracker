@@ -58,6 +58,7 @@ textarea {
 }
 
 .fotm-eq-bar {
+  display: inline-block;
   animation: fotm-equalizer 0.9s ease-in-out infinite;
   transform-origin: bottom;
 }

@@ -345,7 +345,11 @@ async function readActiveSongs({
 
   return filtered.sort((left, right) => {
     if (sortBy === "track") {
-      return compareText(left.track.name, right.track.name, sortDirection);
+      return compareText(
+        left.track.nameRomanized ?? left.track.name,
+        right.track.nameRomanized ?? right.track.name,
+        sortDirection,
+      );
     }
 
     if (sortBy === "artist") {

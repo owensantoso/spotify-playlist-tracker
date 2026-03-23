@@ -40,6 +40,13 @@ function collapseRomanizedWhitespace(value: string) {
   return value.replace(/\s+/g, " ").replace(/\s*-\s*/g, "-").trim();
 }
 
+function collapseSpacedLatinRuns(value: string) {
+  return value.replace(
+    /\b(?:[A-Za-z0-9]\s+){1,}[A-Za-z0-9]\b/g,
+    (match) => match.replace(/\s+/g, ""),
+  );
+}
+
 async function getKuroshiro() {
   if (!global.__kuroshiroPromise__) {
     global.__kuroshiroPromise__ = (async () => {
@@ -80,11 +87,13 @@ export async function romanizeText(value: string) {
   }
 
   if (hasHan(value)) {
-    const result = collapseRomanizedWhitespace(
-      pinyin(value, {
-        toneType: "symbol",
-        type: "string",
-      }),
+    const result = collapseSpacedLatinRuns(
+      collapseRomanizedWhitespace(
+        pinyin(value, {
+          toneType: "symbol",
+          type: "string",
+        }),
+      ),
     );
     return result && result.toLowerCase() !== value.toLowerCase() ? result : null;
   }
