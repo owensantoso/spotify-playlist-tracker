@@ -404,60 +404,60 @@ export function Navigation({
         </div>
 
         {authStatus.isAuthenticated ? (
-          <div className="rounded-[1.8rem] border border-white/12 bg-black/15 px-4 py-4">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex min-w-0 items-center gap-4">
+          <div className="rounded-[1.8rem] border border-white/12 bg-black/15 px-5 py-5">
+            <div className="grid gap-5 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-start">
+              <div className="flex items-start">
                 {nowPlaying?.artworkUrl ? (
                   <img
                     src={nowPlaying.artworkUrl}
                     alt=""
-                    className="h-16 w-16 rounded-2xl object-cover"
+                    className="h-24 w-24 rounded-[1.75rem] object-cover lg:h-28 lg:w-28"
                   />
                 ) : (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-[10px] uppercase tracking-[0.2em] text-stone-400">
+                  <div className="flex h-24 w-24 items-center justify-center rounded-[1.75rem] border border-white/10 bg-white/5 text-[10px] uppercase tracking-[0.2em] text-stone-400 lg:h-28 lg:w-28">
                     Idle
                   </div>
                 )}
-                <div className="min-w-0 group/song-tools relative pr-12">
-                  {nowPlaying ? (
-                    <SongToolsMenu
-                      title={nowPlaying.title}
-                      artists={nowPlaying.artists}
-                      panelClassName="top-full"
-                    />
-                  ) : null}
-                  <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[--color-accent]">
-                    {nowPlaying ? (nowPlaying.isPlaying ? "Now playing" : "Paused") : "Now playing"}
+              </div>
+              <div className="min-w-0 group/song-tools relative pr-12">
+                {nowPlaying ? (
+                  <SongToolsMenu
+                    title={nowPlaying.title}
+                    artists={nowPlaying.artists}
+                    panelClassName="top-full"
+                  />
+                ) : null}
+                <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-[--color-accent]">
+                  {nowPlaying ? (nowPlaying.isPlaying ? "Now playing" : "Paused") : "Now playing"}
+                </p>
+                {nowPlaying?.titleRomanized ? (
+                  <p className="mt-1 truncate font-mono text-[11px] uppercase tracking-[0.1em] text-stone-400">
+                    {nowPlaying.titleRomanized}
                   </p>
-                  {nowPlaying?.titleRomanized ? (
-                    <p className="truncate font-mono text-[10px] uppercase tracking-[0.08em] text-stone-400">
-                      {nowPlaying.titleRomanized}
-                    </p>
-                  ) : null}
-                  <p className="truncate text-lg font-semibold text-stone-100">
-                    {nowPlaying?.title ?? "Nothing is playing right now"}
+                ) : null}
+                <p className="mt-1 truncate text-[1.85rem] font-semibold leading-none tracking-tight text-stone-100 lg:text-[2.2rem]">
+                  {nowPlaying?.title ?? "Nothing is playing right now"}
+                </p>
+                {nowPlaying?.artistsRomanized?.some((artist, index) => artist && artist !== nowPlaying.artists[index]) ? (
+                  <p className="mt-3 truncate font-mono text-[11px] text-stone-400 lg:text-[12px]">
+                    {nowPlaying.artistsRomanized.join(", ")}
                   </p>
-                  {nowPlaying?.artistsRomanized?.some((artist, index) => artist && artist !== nowPlaying.artists[index]) ? (
-                    <p className="truncate font-mono text-[10px] text-stone-400">
-                      {nowPlaying.artistsRomanized.join(", ")}
-                    </p>
-                  ) : null}
-                  <p className="truncate text-sm text-stone-300">
-                    {nowPlaying ? nowPlaying.artists.join(", ") || "Spotify" : "Start playback on Spotify and this bar will update automatically."}
-                  </p>
-                  <p className="truncate text-xs text-stone-500">
-                    {nowPlaying?.deviceName
-                      ? `Device: ${nowPlaying.deviceName}`
-                      : nowPlaying?.albumName ?? "Polling Spotify every 5 seconds"}
-                  </p>
-                </div>
+                ) : null}
+                <p className="truncate text-[1.05rem] text-stone-300 lg:text-[1.15rem]">
+                  {nowPlaying ? nowPlaying.artists.join(", ") || "Spotify" : "Start playback on Spotify and this bar will update automatically."}
+                </p>
+                <p className="mt-2 truncate text-sm text-stone-500 lg:text-base">
+                  {nowPlaying?.deviceName
+                    ? `Device: ${nowPlaying.deviceName}`
+                    : nowPlaying?.albumName ?? "Playback ready"}
+                </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 lg:justify-self-end lg:self-start">
                 <button
                   type="button"
                   onClick={() => void runPlayerAction("previous")}
-                  className="rounded-full border border-white/12 p-3 text-stone-200 transition hover:border-[--color-accent] hover:text-white"
+                  className="rounded-full border border-white/12 p-3 text-stone-200 transition hover:border-[--color-accent] hover:text-white lg:p-3.5"
                   aria-label="Previous track"
                 >
                   <SkipBack className="h-4 w-4" />
@@ -465,7 +465,7 @@ export function Navigation({
                 <button
                   type="button"
                   onClick={() => void runPlayerAction(nowPlaying?.isPlaying ? "pause" : "play")}
-                  className="rounded-full border border-[--color-accent]/60 bg-[--color-accent]/10 p-3 text-[--color-accent] transition hover:bg-[--color-accent]/20"
+                  className="rounded-full border border-[--color-accent]/60 bg-[--color-accent]/10 p-3 text-[--color-accent] transition hover:bg-[--color-accent]/20 lg:p-3.5"
                   aria-label={nowPlaying?.isPlaying ? "Pause playback" : "Resume playback"}
                 >
                   {nowPlaying?.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -473,7 +473,7 @@ export function Navigation({
                 <button
                   type="button"
                   onClick={() => void runPlayerAction("next")}
-                  className="rounded-full border border-white/12 p-3 text-stone-200 transition hover:border-[--color-accent] hover:text-white"
+                  className="rounded-full border border-white/12 p-3 text-stone-200 transition hover:border-[--color-accent] hover:text-white lg:p-3.5"
                   aria-label="Next track"
                 >
                   <SkipForward className="h-4 w-4" />

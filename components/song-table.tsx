@@ -322,7 +322,7 @@ export function SongTable({
       <p id="active-song-empty" className="hidden text-sm text-stone-400">
         No active songs match this view yet.
       </p>
-      <table className="min-w-full table-separate border-spacing-y-2 text-left text-[13px]">
+      <table className="w-full table-fixed table-separate border-spacing-y-2 text-left text-[13px]">
         <colgroup>
           <col className="w-[11%]" />
           <col className="w-[80px]" />
@@ -530,10 +530,10 @@ export function SongTable({
                     <SongToolsMenu title={row.title} artists={row.artists} />
                     {isNowPlaying ? (
                       <div className="mb-1 flex items-center gap-2">
-                        <span className="inline-flex h-3 items-end gap-[2px]" aria-hidden="true">
-                          <span className="fotm-eq-bar h-[6px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "0ms" }} />
-                          <span className="fotm-eq-bar h-[10px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "140ms" }} />
-                          <span className="fotm-eq-bar h-[7px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "280ms" }} />
+                        <span className="inline-flex h-3 shrink-0 items-end gap-[2px]" aria-hidden="true">
+                          <span className="fotm-eq-bar block h-[6px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "0ms" }} />
+                          <span className="fotm-eq-bar block h-[10px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "140ms" }} />
+                          <span className="fotm-eq-bar block h-[7px] w-[2px] rounded-full bg-[--color-accent]" style={{ animationDelay: "280ms" }} />
                         </span>
                         <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-[--color-accent]">
                           Playing now
