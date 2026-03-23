@@ -323,15 +323,15 @@ export function SongTable({
       </p>
       <table className="min-w-full table-separate border-spacing-y-2 text-left text-[13px]">
         <colgroup>
-          <col className="w-[12%]" />
-          <col className="w-[92px]" />
-          <col className="w-[24%]" />
-          <col className="w-[20%]" />
-          <col className="w-[12%]" />
-          <col className="w-[8%]" />
-          <col className="w-[8%]" />
-          <col className="w-[10%]" />
+          <col className="w-[11%]" />
+          <col className="w-[80px]" />
+          <col className="w-[23%]" />
+          <col className="w-[18%]" />
+          <col className="w-[11%]" />
+          <col className="w-[9%]" />
           <col className="w-[7%]" />
+          <col className="w-[9%]" />
+          <col className="w-[6%]" />
         </colgroup>
         <thead className="text-[11px] uppercase tracking-[0.22em] text-stone-500">
           <tr>

@@ -402,7 +402,7 @@ function CommentNode({
         "cursor-pointer focus-visible:border-[--color-accent]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[--color-accent]/20",
         seekPending && "cursor-progress opacity-80",
         isHighlighted && "border-[--color-accent]/45 bg-[--color-accent]/10 shadow-[0_0_0_1px_rgba(243,167,92,0.16)]",
-        depth > 0 && "mt-2 ml-4",
+        depth > 0 && "mt-2 ml-4 w-[calc(100%-1rem)]",
       )}
       onMouseEnter={() => onBucketEnter(comment.markerBucketSecond)}
       onMouseLeave={() => onBucketLeave(comment.markerBucketSecond)}

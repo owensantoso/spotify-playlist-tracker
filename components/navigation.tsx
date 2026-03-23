@@ -80,7 +80,6 @@ export function Navigation({
   );
   const [progressMs, setProgressMs] = useState(initialNowPlaying?.progressMs ?? 0);
   const [controlPending, setControlPending] = useState<string | null>(null);
-  const [controlError, setControlError] = useState<string | null>(null);
   const controlRequestRef = useRef(0);
   const nowPlayingTrackRef = useRef(initialNowPlaying?.spotifyTrackId ?? null);
 
@@ -142,7 +141,6 @@ export function Navigation({
 
     setNowPlaying(nextTrack);
     setProgressMs(nextTrack?.progressMs ?? 0);
-    setControlError(null);
   }
 
   async function loadNowPlaying() {
@@ -260,7 +258,6 @@ export function Navigation({
     const requestId = controlRequestRef.current + 1;
     controlRequestRef.current = requestId;
     setControlPending(action);
-    setControlError(null);
 
     try {
       const response = await fetch("/api/spotify/player", {
@@ -281,11 +278,6 @@ export function Navigation({
           return;
         }
 
-        if (payload?.status === 403) {
-          setControlError("Reconnect Spotify to grant playback control.");
-        } else if (payload?.status === 409) {
-          setControlError("Open Spotify on a device first.");
-        }
         [300, 1100].forEach((delay) => {
           window.setTimeout(() => {
             if (controlRequestRef.current === requestId) {
@@ -311,9 +303,7 @@ export function Navigation({
         }, delay);
       });
     } catch {
-      if (controlRequestRef.current === requestId) {
-        setControlError("Could not sync playback state.");
-      }
+      // Keep the last known playback state until the next refresh succeeds.
     } finally {
       window.setTimeout(() => {
         if (controlRequestRef.current === requestId) {
@@ -497,7 +487,7 @@ export function Navigation({
               track={nowPlaying}
               progressMs={progressMs}
               authStatus={authStatus}
-              controlStatusLabel={controlError ?? (controlPending ? "Syncing playback..." : "")}
+              controlStatusLabel={controlPending ? "Syncing playback..." : ""}
               onRefreshNowPlaying={loadNowPlaying}
               commentPayload={commentPayload}
             />

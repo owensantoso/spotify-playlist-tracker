@@ -132,14 +132,14 @@ export function SongRowList({
                 </p>
                 <p className="text-xs text-stone-500">
                   {item.contributor || item.contributorSpotifyUserId ? (
-                    <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5">
                       <span>Added by</span>
                       <SpotifyUserLink
                         name={item.contributor}
                         spotifyUserId={item.contributorSpotifyUserId}
                         profileUrl={item.contributorProfileUrl}
                         imageUrl={item.contributorImageUrl}
-                        sizeClassName="h-6 w-6"
+                        sizeClassName="h-5 w-5"
                       />
                     </span>
                   ) : (
