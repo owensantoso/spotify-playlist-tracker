@@ -1,6 +1,7 @@
 import { ActiveSongsSearchController } from "@/components/active-songs-search-controller";
 import { SongTable } from "@/components/song-table";
 import { SectionCard } from "@/components/section-card";
+import { getCommentCountMap } from "@/lib/services/comment-service";
 import { getNowPlayingTrack } from "@/lib/services/now-playing-service";
 import { getSpotifyUserAvatarMap } from "@/lib/services/spotify-user-service";
 import { type ActiveSongsSortBy, type SortDirection, getActiveSongs } from "@/lib/services/stats-service";
@@ -24,7 +25,10 @@ export default async function ActiveSongsPage({ searchParams }: ActiveSongsPageP
     }),
     getNowPlayingTrack(),
   ]);
-  const contributorAvatars = await getSpotifyUserAvatarMap(rows.map((row) => row.addedBySpotifyUserId));
+  const [contributorAvatars, commentCounts] = await Promise.all([
+    getSpotifyUserAvatarMap(rows.map((row) => row.addedBySpotifyUserId)),
+    getCommentCountMap(rows.map((row) => row.trackSpotifyId)),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-5 py-8">
@@ -53,6 +57,7 @@ export default async function ActiveSongsPage({ searchParams }: ActiveSongsPageP
             contributorSpotifyUserId: row.addedBySpotifyUserId,
             contributorProfileUrl: row.addedBy?.profileUrl ?? null,
             contributorImageUrl: row.addedBySpotifyUserId ? contributorAvatars[row.addedBySpotifyUserId] ?? null : null,
+            commentCount: commentCounts[row.trackSpotifyId] ?? 0,
             addedAt: row.spotifyAddedAt,
             firstSeenAt: row.firstSeenAt,
             spotifyUrl: row.track.spotifyUrl,

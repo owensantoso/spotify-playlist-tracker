@@ -272,6 +272,41 @@ export async function getCommentThreads(trackSpotifyId: string): Promise<ReadRes
   }
 }
 
+export async function getCommentCountMap(trackSpotifyIds: Array<string | null | undefined>) {
+  const uniqueTrackIds = [...new Set(trackSpotifyIds.filter((value): value is string => Boolean(value?.trim())))];
+  if (!uniqueTrackIds.length) {
+    return {};
+  }
+
+  try {
+    return await ensureCommentTables(async () => {
+      const grouped = await db.songComment.groupBy({
+        by: ["trackSpotifyId"],
+        where: {
+          trackSpotifyId: {
+            in: uniqueTrackIds,
+          },
+          deletedAt: null,
+        },
+        _count: {
+          _all: true,
+        },
+      });
+
+      return grouped.reduce<Record<string, number>>((counts, row) => {
+        counts[row.trackSpotifyId] = row._count._all;
+        return counts;
+      }, {});
+    });
+  } catch (error) {
+    if (isCommentFeatureUnavailableError(error)) {
+      return {};
+    }
+
+    throw error;
+  }
+}
+
 export async function createTopLevelComment(input: {
   expectedTrackId: string;
   expectedProgressMs: number;

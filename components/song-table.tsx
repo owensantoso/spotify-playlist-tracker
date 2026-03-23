@@ -20,6 +20,7 @@ type SongTableRow = {
   contributorSpotifyUserId?: string | null;
   contributorProfileUrl?: string | null;
   contributorImageUrl?: string | null;
+  commentCount?: number;
   addedAt: Date | null;
   firstSeenAt: Date;
   spotifyUrl: string;
@@ -98,9 +99,10 @@ export function SongTable({
       <table className="min-w-full table-fixed text-left text-[13px]">
         <colgroup>
           <col className="w-[92px]" />
-          <col className="w-[34%]" />
-          <col className="w-[28%]" />
+          <col className="w-[30%]" />
+          <col className="w-[24%]" />
           <col className="w-[12%]" />
+          <col className="w-[8%]" />
           <col className="w-[12%]" />
           <col className="w-[10%]" />
         </colgroup>
@@ -135,6 +137,7 @@ export function SongTable({
               sortDirection={sortDirection}
               searchQuery={searchQuery}
             />
+            <th className="pb-2.5 pr-4">Comments</th>
             <SortableHeader
               label="Age"
               column="age"
@@ -232,6 +235,9 @@ export function SongTable({
                 </td>
                 <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
                   {row.addedAt ? format(row.addedAt, "MMM d, yyyy") : "Unknown"}
+                </td>
+                <td className={cn("py-3 pr-4 text-stone-300", isNowPlaying && "border-y border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
+                  {row.commentCount ?? 0}
                 </td>
                 <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-r border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
                   {formatRelativeDuration(getPlaylistStartDate(row.addedAt, row.firstSeenAt))}
