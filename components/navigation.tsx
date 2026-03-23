@@ -80,6 +80,7 @@ export function Navigation({
   const [controlPending, setControlPending] = useState<string | null>(null);
   const [controlError, setControlError] = useState<string | null>(null);
   const controlRequestRef = useRef(0);
+  const nowPlayingTrackRef = useRef(initialNowPlaying?.spotifyTrackId ?? null);
 
   useEffect(() => {
     prefetchedRoutes.forEach((href) => {
@@ -118,6 +119,18 @@ export function Navigation({
   }, [pathname]);
 
   function syncNowPlaying(nextTrack: NowPlayingTrack | null) {
+    const nextTrackId = nextTrack?.spotifyTrackId ?? null;
+    if (nowPlayingTrackRef.current !== nextTrackId) {
+      nowPlayingTrackRef.current = nextTrackId;
+      window.dispatchEvent(
+        new CustomEvent("fotm:now-playing-track", {
+          detail: {
+            trackId: nextTrackId,
+          },
+        }),
+      );
+    }
+
     setNowPlaying(nextTrack);
     setProgressMs(nextTrack?.progressMs ?? 0);
     setControlError(null);

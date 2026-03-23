@@ -1,7 +1,10 @@
 /* eslint-disable @next/next/no-img-element */
 
+"use client";
+
 import { format } from "date-fns";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { SpotifyUserLink } from "@/components/spotify-user-link";
 import type { ActiveSongsSortBy, SortDirection } from "@/lib/services/stats-service";
@@ -87,6 +90,22 @@ export function SongTable({
   sortDirection,
   nowPlayingTrackId,
 }: SongTableProps) {
+  const [eventTrackId, setEventTrackId] = useState<string | null>(null);
+
+  useEffect(() => {
+    function handleTrackChange(event: Event) {
+      const detail = (event as CustomEvent<{ trackId?: string | null }>).detail;
+      setEventTrackId(detail?.trackId ?? null);
+    }
+
+    window.addEventListener("fotm:now-playing-track", handleTrackChange as EventListener);
+    return () => {
+      window.removeEventListener("fotm:now-playing-track", handleTrackChange as EventListener);
+    };
+  }, []);
+
+  const activeTrackId = eventTrackId ?? nowPlayingTrackId ?? null;
+
   if (!rows.length) {
     return <p className="text-sm text-stone-400">No active songs match this view yet.</p>;
   }
@@ -150,7 +169,7 @@ export function SongTable({
         <tbody id="active-song-body" className="divide-y divide-white/6 text-stone-200">
           {rows.map((row) => {
             const searchValue = `${row.title} ${row.titleRomanized ?? ""} ${row.artists.join(" ")} ${(row.artistsRomanized ?? []).join(" ")}`.toLocaleLowerCase();
-            const isNowPlaying = nowPlayingTrackId === row.spotifyTrackId;
+            const isNowPlaying = activeTrackId === row.spotifyTrackId;
 
             return (
               <tr
@@ -158,11 +177,12 @@ export function SongTable({
                 data-song-row="true"
                 data-search={searchValue}
                 className={cn(
-                  "transition",
-                  isNowPlaying && "bg-[rgba(243,167,92,0.12)] shadow-[inset_0_0_0_1px_rgba(243,167,92,0.22)]",
+                  "transition-colors duration-200",
+                  isNowPlaying &&
+                    "bg-[linear-gradient(90deg,rgba(243,167,92,0.14),rgba(243,167,92,0.06),rgba(106,161,109,0.12))] shadow-[inset_0_0_0_1px_rgba(243,167,92,0.18)]",
                 )}
               >
-                <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-l border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
+                <td className="py-3 pr-4">
                   <a href={row.spotifyUrl} target="_blank" rel="noreferrer" className="block w-fit">
                     {row.artworkUrl ? (
                       <img
@@ -170,7 +190,7 @@ export function SongTable({
                         alt=""
                         className={cn(
                           "h-10 w-10 rounded-xl object-cover",
-                          isNowPlaying && "ring-2 ring-[--color-accent] ring-offset-2 ring-offset-[--color-ink] shadow-[0_0_26px_rgba(243,167,92,0.22)]",
+                          isNowPlaying && "ring-2 ring-[--color-accent]/85 ring-offset-2 ring-offset-[--color-ink] shadow-[0_0_24px_rgba(243,167,92,0.18)]",
                         )}
                       />
                     ) : (
@@ -180,11 +200,14 @@ export function SongTable({
                     )}
                   </a>
                 </td>
-                <td className={cn("py-3 pr-4 font-medium text-stone-100", isNowPlaying && "border-y border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
+                <td className="relative py-3 pr-4 font-medium text-stone-100">
                   {isNowPlaying ? (
-                    <p className="mb-1 inline-flex rounded-full border border-[--color-accent]/45 bg-[--color-accent]/12 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[--color-accent]">
-                      Now playing
+                    <p className="mb-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[--color-accent]">
+                      Playing now
                     </p>
+                  ) : null}
+                  {isNowPlaying ? (
+                    <div className="absolute inset-y-3 left-0 w-px bg-[linear-gradient(180deg,transparent,rgba(243,167,92,0.85),transparent)]" aria-hidden="true" />
                   ) : null}
                   {row.titleRomanized ? (
                     <p className="mb-0.5 truncate font-mono text-[8px] font-normal uppercase leading-[1.15] tracking-[0.04em] text-stone-300">
@@ -200,7 +223,7 @@ export function SongTable({
                     {row.title}
                   </a>
                 </td>
-                <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
+                <td className="py-3 pr-4">
                   {row.artistsRomanized?.some((artist, index) => artist && artist !== row.artists[index]) ? (
                     <p className="mb-0.5 truncate font-mono text-[8px] uppercase leading-[1.15] tracking-[0.04em] text-stone-300">
                       {row.artistsRomanized.join(", ")}
@@ -222,7 +245,7 @@ export function SongTable({
                     ))}
                   </div>
                 </td>
-                <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
+                <td className="py-3 pr-4">
                   <SpotifyUserLink
                     name={row.contributor}
                     spotifyUserId={row.contributorSpotifyUserId}
@@ -233,13 +256,13 @@ export function SongTable({
                     textClassName="truncate"
                   />
                 </td>
-                <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
+                <td className="py-3 pr-4">
                   {row.addedAt ? format(row.addedAt, "MMM d, yyyy") : "Unknown"}
                 </td>
-                <td className={cn("py-3 pr-4 text-stone-300", isNowPlaying && "border-y border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
+                <td className="py-3 pr-4 text-stone-300">
                   {row.commentCount ?? 0}
                 </td>
-                <td className={cn("py-3 pr-4", isNowPlaying && "border-y border-r border-[--color-accent]/35 bg-[rgba(243,167,92,0.08)]")}>
+                <td className="py-3 pr-4">
                   {formatRelativeDuration(getPlaylistStartDate(row.addedAt, row.firstSeenAt))}
                 </td>
               </tr>

@@ -1,6 +1,9 @@
 /* eslint-disable @next/next/no-img-element */
 
+"use client";
+
 import { format } from "date-fns";
+import { useEffect, useState } from "react";
 
 import { SpotifyUserLink } from "@/components/spotify-user-link";
 import { cn, formatLifetimeMs, formatRelativeDuration, getPlaylistStartDate } from "@/lib/utils";
@@ -37,6 +40,22 @@ export function SongRowList({
   showLifetime = false,
   nowPlayingTrackId,
 }: SongRowListProps) {
+  const [eventTrackId, setEventTrackId] = useState<string | null>(null);
+
+  useEffect(() => {
+    function handleTrackChange(event: Event) {
+      const detail = (event as CustomEvent<{ trackId?: string | null }>).detail;
+      setEventTrackId(detail?.trackId ?? null);
+    }
+
+    window.addEventListener("fotm:now-playing-track", handleTrackChange as EventListener);
+    return () => {
+      window.removeEventListener("fotm:now-playing-track", handleTrackChange as EventListener);
+    };
+  }, []);
+
+  const activeTrackId = eventTrackId ?? nowPlayingTrackId ?? null;
+
   if (!items.length) {
     return <p className="text-sm text-stone-400">{emptyLabel}</p>;
   }
@@ -44,7 +63,7 @@ export function SongRowList({
   return (
     <div className="space-y-2.5">
       {items.map((item) => {
-        const isNowPlaying = item.spotifyTrackId === nowPlayingTrackId;
+        const isNowPlaying = item.spotifyTrackId === activeTrackId;
 
         return (
           <div
@@ -73,7 +92,7 @@ export function SongRowList({
               </a>
               <div>
                 {isNowPlaying ? (
-                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[--color-accent]">Now playing</p>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-[--color-accent]">Playing now</p>
                 ) : null}
                 {item.titleRomanized ? (
                   <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-stone-400">{item.titleRomanized}</p>
