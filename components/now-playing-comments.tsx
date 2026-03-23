@@ -2,7 +2,7 @@
 
 "use client";
 
-import { LoaderCircle, MessageCirclePlus, MessagesSquare, Pencil, Reply, Trash2, X } from "lucide-react";
+import { ImagePlus, LoaderCircle, MessageCirclePlus, MessagesSquare, Pencil, Reply, Trash2, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -43,6 +43,19 @@ type NowPlayingCommentsProps = {
   commentPayload: CommentTrackPayload;
 };
 
+function getCommentPreviewLabel(comment: Pick<CommentThread, "body" | "attachments">) {
+  const trimmed = comment.body.trim();
+  if (trimmed) {
+    return trimmed;
+  }
+
+  if (comment.attachments.some((attachment) => attachment.kind === "IMAGE")) {
+    return "Image attachment";
+  }
+
+  return "Comment";
+}
+
 function applyNewTopLevelComment(
   payload: CommentTrackPayload,
   comment: CommentTrackPayload["threads"][number],
@@ -57,7 +70,7 @@ function applyNewTopLevelComment(
               ...marker,
               commentCount: marker.commentCount + 1,
               threadCount: marker.threadCount + 1,
-              previewComment: comment.body,
+              previewComment: getCommentPreviewLabel(comment),
               authors: [
                 comment.author,
                 ...marker.authors.filter(
@@ -76,7 +89,7 @@ function applyNewTopLevelComment(
           commentCount: 1,
           threadCount: 1,
           authors: [comment.author],
-          previewComment: comment.body,
+          previewComment: getCommentPreviewLabel(comment),
           topLevelCommentIds: [comment.id],
         },
       ].sort((left, right) => left.markerBucketSecond - right.markerBucketSecond);
@@ -156,7 +169,7 @@ function updateMarkerPreview(
 
     return {
       ...marker,
-      previewComment: latestVisible?.body || "Comment deleted",
+      previewComment: latestVisible ? getCommentPreviewLabel(latestVisible) : "Comment deleted",
       threadCount: bucketRoots.length,
       commentCount: bucketRoots.length,
     };
@@ -211,6 +224,98 @@ function Avatar({
   );
 }
 
+function dataUrlToBlob(dataUrl: string) {
+  const [prefix, base64] = dataUrl.split(",", 2);
+  const mimeType = prefix.match(/^data:([^;]+);base64$/i)?.[1] ?? "image/jpeg";
+  const binary = atob(base64 ?? "");
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
+async function compressImageFile(file: File) {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Choose an image file.");
+  }
+
+  const sourceUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("Could not read that image."));
+    reader.readAsDataURL(file);
+  });
+
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const element = new Image();
+    element.onload = () => resolve(element);
+    element.onerror = () => reject(new Error("Could not decode that image."));
+    element.src = sourceUrl;
+  });
+
+  const scale = Math.min(1, 256 / Math.max(image.width, image.height));
+  const targetWidth = Math.max(1, Math.round(image.width * scale));
+  const targetHeight = Math.max(1, Math.round(image.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Could not prepare the image compressor.");
+  }
+
+  context.fillStyle = "#0b120f";
+  context.fillRect(0, 0, targetWidth, targetHeight);
+  context.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+  let quality = 0.18;
+  let dataUrl = canvas.toDataURL("image/jpeg", quality);
+  let blob = dataUrlToBlob(dataUrl);
+
+  while (blob.size > 96_000 && quality > 0.04) {
+    quality = Math.max(0.04, quality - 0.04);
+    dataUrl = canvas.toDataURL("image/jpeg", quality);
+    blob = dataUrlToBlob(dataUrl);
+  }
+
+  if (blob.size > 96_000) {
+    throw new Error("Image is still too large after heavy compression.");
+  }
+
+  return dataUrl;
+}
+
+function CommentImagePreview({
+  imageDataUrl,
+  className,
+  onRemove,
+}: {
+  imageDataUrl: string;
+  className?: string;
+  onRemove?: () => void;
+}) {
+  return (
+    <div className={cn("mt-3 inline-flex max-w-full flex-col gap-2 rounded-[1.35rem] border border-white/10 bg-black/20 p-2", className)}>
+      <img
+        src={imageDataUrl}
+        alt="Comment attachment preview"
+        className="max-h-64 max-w-64 rounded-[1rem] object-contain"
+      />
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="inline-flex items-center justify-center rounded-full border border-white/10 px-3 py-1 text-xs text-stone-300 transition hover:border-white/20 hover:text-white"
+        >
+          Remove image
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function CommentNode({
   comment,
   depth = 0,
@@ -224,11 +329,14 @@ function CommentNode({
   editingCommentId,
   replyDraft,
   editDraft,
+  replyImageDataUrl,
   mutationPendingId,
   mutationError,
+  onReplyMutationError,
   onReplyStart,
   onEditStart,
   onReplyDraftChange,
+  onReplyImageChange,
   onEditDraftChange,
   onReplySubmit,
   onEditSubmit,
@@ -247,11 +355,14 @@ function CommentNode({
   editingCommentId: string | null;
   replyDraft: string;
   editDraft: string;
+  replyImageDataUrl: string | null;
   mutationPendingId: string | null;
   mutationError: string | null;
+  onReplyMutationError: (message: string | null) => void;
   onReplyStart: (comment: CommentThread) => void;
   onEditStart: (comment: CommentThread) => void;
   onReplyDraftChange: (value: string) => void;
+  onReplyImageChange: (value: string | null) => void;
   onEditDraftChange: (value: string) => void;
   onReplySubmit: (comment: CommentThread) => void;
   onEditSubmit: (comment: CommentThread) => void;
@@ -264,6 +375,14 @@ function CommentNode({
   const isEditing = editingCommentId === comment.id;
   const isDeleted = Boolean(comment.deletedAt);
   const isMutating = mutationPendingId === comment.id;
+
+  const replyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (isReplying) {
+      replyTextareaRef.current?.focus();
+    }
+  }, [isReplying]);
 
   return (
     <div
@@ -345,9 +464,18 @@ function CommentNode({
               </div>
             </div>
           ) : (
-            <p className={cn("mt-1 whitespace-pre-wrap text-sm leading-6 text-stone-100", isDeleted && "italic text-stone-500")}>
-              {isDeleted ? "[comment deleted]" : comment.body}
-            </p>
+            <>
+              <p className={cn("mt-1 whitespace-pre-wrap text-sm leading-6 text-stone-100", isDeleted && "italic text-stone-500")}>
+                {isDeleted ? "[comment deleted]" : comment.body}
+              </p>
+              {!isDeleted
+                ? comment.attachments
+                    .filter((attachment) => attachment.kind === "IMAGE")
+                    .map((attachment) => (
+                      <CommentImagePreview key={attachment.id} imageDataUrl={attachment.storageUrl} />
+                    ))
+                : null}
+            </>
           )}
           <div
             className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-400"
@@ -392,17 +520,50 @@ function CommentNode({
               onKeyDown={(event) => event.stopPropagation()}
             >
               <textarea
+                ref={replyTextareaRef}
                 value={replyDraft}
                 onChange={(event) => onReplyDraftChange(event.target.value)}
                 rows={3}
                 placeholder="Write a reply..."
                 className="w-full rounded-2xl border border-white/10 bg-[rgba(10,15,12,0.88)] px-4 py-3 text-sm text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-[--color-accent]"
               />
+              {replyImageDataUrl ? (
+                <CommentImagePreview
+                  imageDataUrl={replyImageDataUrl}
+                  onRemove={() => onReplyImageChange(null)}
+                />
+              ) : null}
               <div className="mt-2 flex items-center gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-xs text-stone-300 transition hover:border-white/20 hover:text-white">
+                  <ImagePlus className="h-3.5 w-3.5" />
+                  Add image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      event.currentTarget.value = "";
+                      if (!file) {
+                        return;
+                      }
+
+                      try {
+                        onReplyMutationError(null);
+                        onReplyImageChange(await compressImageFile(file));
+                      } catch (error) {
+                        onReplyImageChange(null);
+                        onReplyMutationError(
+                          error instanceof Error ? error.message : "Could not compress that image.",
+                        );
+                      }
+                    }}
+                  />
+                </label>
                 <button
                   type="button"
                   onClick={() => onReplySubmit(comment)}
-                  disabled={isMutating || !replyDraft.trim()}
+                  disabled={isMutating || (!replyDraft.trim() && !replyImageDataUrl)}
                   className="rounded-full border border-[--color-accent]/45 bg-[--color-accent]/10 px-3 py-1.5 text-xs text-[--color-accent] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isMutating ? "Replying..." : "Reply"}
@@ -439,11 +600,14 @@ function CommentNode({
               editingCommentId={editingCommentId}
               replyDraft={replyDraft}
               editDraft={editDraft}
+              replyImageDataUrl={replyImageDataUrl}
               mutationPendingId={mutationPendingId}
               mutationError={mutationError}
+              onReplyMutationError={onReplyMutationError}
               onReplyStart={onReplyStart}
               onEditStart={onEditStart}
               onReplyDraftChange={onReplyDraftChange}
+              onReplyImageChange={onReplyImageChange}
               onEditDraftChange={onEditDraftChange}
               onReplySubmit={onReplySubmit}
               onEditSubmit={onEditSubmit}
@@ -472,9 +636,11 @@ export function NowPlayingComments({
   const [commentDraft, setCommentDraft] = useState("");
   const [submitPending, setSubmitPending] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [commentImageDataUrl, setCommentImageDataUrl] = useState<string | null>(null);
   const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState("");
+  const [replyImageDataUrl, setReplyImageDataUrl] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [mutationPendingId, setMutationPendingId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -509,7 +675,9 @@ export function NowPlayingComments({
     setReplyingToCommentId(null);
     setEditingCommentId(null);
     setReplyDraft("");
+    setReplyImageDataUrl(null);
     setEditDraft("");
+    setCommentImageDataUrl(null);
     setMutationPendingId(null);
     setMutationError(null);
     shownPopupKeysRef.current.clear();
@@ -701,6 +869,7 @@ export function NowPlayingComments({
       capturedAt: Date.now(),
       body: commentDraft,
       clientSubmissionId: crypto.randomUUID(),
+      imageDataUrl: commentImageDataUrl,
     };
 
     try {
@@ -739,6 +908,7 @@ export function NowPlayingComments({
           if (retryResponse.ok) {
             const retryData = (await retryResponse.json().catch(() => null)) as CommentMutationResponse | null;
             setCommentDraft("");
+            setCommentImageDataUrl(null);
             setComposerOpen(false);
             if (retryData?.comment) {
               setLocalCommentPayload((current) => applyNewTopLevelComment(current, retryData.comment!));
@@ -756,6 +926,7 @@ export function NowPlayingComments({
       }
 
       setCommentDraft("");
+      setCommentImageDataUrl(null);
       setComposerOpen(false);
       if (data?.comment) {
         setLocalCommentPayload((current) => applyNewTopLevelComment(current, data.comment!));
@@ -768,7 +939,7 @@ export function NowPlayingComments({
   }
 
   async function handleReplySubmit(parent: CommentThread) {
-    if (!replyDraft.trim()) {
+    if (!replyDraft.trim() && !replyImageDataUrl) {
       return;
     }
 
@@ -782,6 +953,7 @@ export function NowPlayingComments({
         body: JSON.stringify({
           body: replyDraft,
           clientSubmissionId: crypto.randomUUID(),
+          imageDataUrl: replyImageDataUrl,
         }),
       });
       const data = (await response.json().catch(() => null)) as CommentMutationResponse | null;
@@ -800,6 +972,7 @@ export function NowPlayingComments({
         };
       });
       setReplyDraft("");
+      setReplyImageDataUrl(null);
       setReplyingToCommentId(null);
     } catch {
       setMutationError("Could not save your reply.");
@@ -876,6 +1049,7 @@ export function NowPlayingComments({
       if (replyingToCommentId === comment.id) {
         setReplyingToCommentId(null);
         setReplyDraft("");
+        setReplyImageDataUrl(null);
       }
     } catch {
       setMutationError("Could not delete your comment.");
@@ -1056,17 +1230,47 @@ export function NowPlayingComments({
               placeholder="Write what hits at this exact moment..."
               className="mt-3 w-full rounded-2xl border border-white/10 bg-[rgba(10,15,12,0.88)] px-4 py-3 text-sm text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-[--color-accent]"
             />
+            {commentImageDataUrl ? (
+              <CommentImagePreview imageDataUrl={commentImageDataUrl} onRemove={() => setCommentImageDataUrl(null)} />
+            ) : null}
 
             <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-stone-500">
                 The final timestamp is verified from a fresh Spotify playback read when you submit.
               </p>
               <div className="flex items-center gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-stone-300 transition hover:border-white/20 hover:text-white">
+                  <ImagePlus className="h-4 w-4" />
+                  Add image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      event.currentTarget.value = "";
+                      if (!file) {
+                        return;
+                      }
+
+                      try {
+                        setSubmitError(null);
+                        setCommentImageDataUrl(await compressImageFile(file));
+                      } catch (error) {
+                        setCommentImageDataUrl(null);
+                        setSubmitError(
+                          error instanceof Error ? error.message : "Could not compress that image.",
+                        );
+                      }
+                    }}
+                  />
+                </label>
                 <button
                   type="button"
                   onClick={() => {
                     setComposerOpen(false);
                     setSubmitError(null);
+                    setCommentImageDataUrl(null);
                   }}
                   className="rounded-full border border-white/10 px-4 py-2 text-sm text-stone-300 transition hover:border-white/20 hover:text-white"
                 >
@@ -1075,7 +1279,7 @@ export function NowPlayingComments({
                 <button
                   type="button"
                   onClick={() => void handleSubmitComment()}
-                  disabled={submitPending || !track || !commentDraft.trim()}
+                  disabled={submitPending || !track || (!commentDraft.trim() && !commentImageDataUrl)}
                   className="inline-flex items-center gap-2 rounded-full border border-[--color-accent]/45 bg-[--color-accent]/10 px-4 py-2 text-sm text-[--color-accent] transition hover:bg-[--color-accent]/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {submitPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <MessageCirclePlus className="h-4 w-4" />}
@@ -1114,11 +1318,14 @@ export function NowPlayingComments({
                     editingCommentId={editingCommentId}
                     replyDraft={replyDraft}
                     editDraft={editDraft}
+                    replyImageDataUrl={replyImageDataUrl}
                     mutationPendingId={mutationPendingId}
                     mutationError={mutationError}
+                    onReplyMutationError={setMutationError}
                     onReplyStart={(comment) => {
                       setReplyingToCommentId(comment.id);
                       setReplyDraft("");
+                      setReplyImageDataUrl(null);
                       setEditingCommentId(null);
                       setEditDraft("");
                       setMutationError(null);
@@ -1128,9 +1335,11 @@ export function NowPlayingComments({
                       setEditDraft(comment.body);
                       setReplyingToCommentId(null);
                       setReplyDraft("");
+                      setReplyImageDataUrl(null);
                       setMutationError(null);
                     }}
                     onReplyDraftChange={setReplyDraft}
+                    onReplyImageChange={setReplyImageDataUrl}
                     onEditDraftChange={setEditDraft}
                     onReplySubmit={(comment) => void handleReplySubmit(comment)}
                     onEditSubmit={(comment) => void handleEditSubmit(comment)}
@@ -1139,6 +1348,7 @@ export function NowPlayingComments({
                       setReplyingToCommentId(null);
                       setEditingCommentId(null);
                       setReplyDraft("");
+                      setReplyImageDataUrl(null);
                       setEditDraft("");
                       setMutationError(null);
                     }}

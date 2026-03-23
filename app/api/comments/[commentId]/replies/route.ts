@@ -12,6 +12,7 @@ import {
 type CreateReplyRequest = {
   body?: string;
   clientSubmissionId?: string;
+  imageDataUrl?: string | null;
 };
 
 type RouteContext = {
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       parentCommentId: commentId,
       body: body.body,
       clientSubmissionId: body.clientSubmissionId,
+      imageDataUrl: body.imageDataUrl ?? null,
     });
 
     const response = NextResponse.json(

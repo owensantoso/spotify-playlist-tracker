@@ -17,6 +17,7 @@ type CreateCommentRequest = {
   capturedAt?: number;
   body?: string;
   clientSubmissionId?: string;
+  imageDataUrl?: string | null;
 };
 
 export async function GET(request: NextRequest) {
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
       capturedAt: Number(body.capturedAt ?? Date.now()),
       body: body.body,
       clientSubmissionId: body.clientSubmissionId,
+      imageDataUrl: body.imageDataUrl ?? null,
     });
 
     const response = NextResponse.json(

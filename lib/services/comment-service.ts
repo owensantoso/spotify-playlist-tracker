@@ -11,6 +11,7 @@ import { upsertSpotifyUserProfile } from "@/lib/services/user-account-service";
 
 const MAX_COMMENT_LENGTH = 600;
 const PLAYBACK_DRIFT_TOLERANCE_MS = 2_500;
+const MAX_IMAGE_BYTES = 96_000;
 
 export class CommentFeatureUnavailableError extends Error {}
 export class CommentUnauthorizedError extends Error {}
@@ -54,6 +55,13 @@ export type CommentThread = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  attachments: Array<{
+    id: string;
+    kind: "IMAGE" | "AUDIO";
+    storageUrl: string;
+    mimeType: string | null;
+    byteSize: number | null;
+  }>;
   author: MarkerAuthor;
   replies: CommentThread[];
 };
@@ -83,9 +91,9 @@ function isCommentFeatureUnavailableError(error: unknown) {
   );
 }
 
-function normalizeBody(body: string) {
+function normalizeBody(body: string, options?: { allowEmpty?: boolean }) {
   const trimmed = body.trim();
-  if (!trimmed) {
+  if (!trimmed && !options?.allowEmpty) {
     throw new CommentValidationError("Comment text is required.");
   }
 
@@ -94,6 +102,30 @@ function normalizeBody(body: string) {
   }
 
   return trimmed;
+}
+
+function normalizeImageAttachment(imageDataUrl: string | null | undefined) {
+  const value = imageDataUrl?.trim();
+  if (!value) {
+    return null;
+  }
+
+  const match = value.match(/^data:(image\/jpeg);base64,([A-Za-z0-9+/=]+)$/i);
+  if (!match) {
+    throw new CommentValidationError("Only compressed JPEG images are supported.");
+  }
+
+  const mimeType = match[1].toLowerCase();
+  const byteSize = Buffer.from(match[2], "base64").byteLength;
+  if (byteSize > MAX_IMAGE_BYTES) {
+    throw new CommentValidationError("Image is still too large after compression.");
+  }
+
+  return {
+    storageUrl: `data:${mimeType};base64,${match[2]}`,
+    mimeType,
+    byteSize,
+  };
 }
 
 function isPlayableTrack(
@@ -127,6 +159,19 @@ function mapAuthor(comment: {
   };
 }
 
+function getPreviewComment(body: string, attachmentCount?: number | null) {
+  const trimmed = body.trim();
+  if (trimmed) {
+    return trimmed;
+  }
+
+  if ((attachmentCount ?? 0) > 0) {
+    return "Image attachment";
+  }
+
+  return "Comment";
+}
+
 function mapCommentThread(comment: {
   id: string;
   trackSpotifyId: string;
@@ -138,6 +183,13 @@ function mapCommentThread(comment: {
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date | null;
+  attachments?: Array<{
+    id: string;
+    kind: "IMAGE" | "AUDIO";
+    storageUrl: string;
+    mimeType: string | null;
+    byteSize: number | null;
+  }>;
   authorSpotifyUserId: string;
   authorDisplayNameSnapshot: string | null;
   authorImageUrlSnapshot: string | null;
@@ -154,6 +206,7 @@ function mapCommentThread(comment: {
     createdAt: comment.createdAt.toISOString(),
     updatedAt: comment.updatedAt.toISOString(),
     deletedAt: comment.deletedAt?.toISOString() ?? null,
+    attachments: comment.attachments ?? [],
     author: mapAuthor(comment),
     replies: [],
   };
@@ -185,6 +238,7 @@ export async function getCommentMarkers(trackSpotifyId: string): Promise<ReadRes
           markerBucketSecond: true,
           timestampMs: true,
           body: true,
+          attachmentCount: true,
           updatedAt: true,
           createdAt: true,
           authorSpotifyUserId: true,
@@ -217,7 +271,7 @@ export async function getCommentMarkers(trackSpotifyId: string): Promise<ReadRes
           commentCount: group.length,
           threadCount: group.length,
           authors: [...uniqueAuthors.values()],
-          previewComment: preview.body,
+          previewComment: getPreviewComment(preview.body, preview.attachmentCount),
           topLevelCommentIds: group.map((comment) => comment.id),
         } satisfies CommentMarker;
       });
@@ -256,9 +310,22 @@ export async function getCommentThreads(trackSpotifyId: string): Promise<ReadRes
           timestampMs: true,
           markerBucketSecond: true,
           body: true,
+          attachmentCount: true,
           createdAt: true,
           updatedAt: true,
           deletedAt: true,
+          attachments: {
+            where: {
+              status: "READY",
+            },
+            select: {
+              id: true,
+              kind: true,
+              storageUrl: true,
+              mimeType: true,
+              byteSize: true,
+            },
+          },
           authorSpotifyUserId: true,
           authorDisplayNameSnapshot: true,
           authorImageUrlSnapshot: true,
@@ -317,9 +384,22 @@ export async function getCommentTrackPayload(trackSpotifyId: string): Promise<Co
           timestampMs: true,
           markerBucketSecond: true,
           body: true,
+          attachmentCount: true,
           createdAt: true,
           updatedAt: true,
           deletedAt: true,
+          attachments: {
+            where: {
+              status: "READY",
+            },
+            select: {
+              id: true,
+              kind: true,
+              storageUrl: true,
+              mimeType: true,
+              byteSize: true,
+            },
+          },
           authorSpotifyUserId: true,
           authorDisplayNameSnapshot: true,
           authorImageUrlSnapshot: true,
@@ -372,7 +452,7 @@ export async function getCommentTrackPayload(trackSpotifyId: string): Promise<Co
           commentCount: group.length,
           threadCount: group.length,
           authors: [...uniqueAuthors.values()],
-          previewComment: preview.body,
+          previewComment: getPreviewComment(preview.body, preview.attachmentCount),
           topLevelCommentIds: group.map((comment) => comment.id),
         } satisfies CommentMarker;
       });
@@ -439,13 +519,15 @@ export async function createTopLevelComment(input: {
   capturedAt: number;
   body: string;
   clientSubmissionId: string;
+  imageDataUrl?: string | null;
 }) {
   const viewerSession = await getViewerSession();
   if (!viewerSession?.spotifyUserId) {
     throw new CommentUnauthorizedError("Viewer sign-in is required.");
   }
 
-  const normalizedBody = normalizeBody(input.body);
+  const imageAttachment = normalizeImageAttachment(input.imageDataUrl);
+  const normalizedBody = normalizeBody(input.body, { allowEmpty: Boolean(imageAttachment) });
 
   try {
     return await ensureCommentTables(async () =>
@@ -510,7 +592,20 @@ export async function createTopLevelComment(input: {
               timestampMs: liveProgress,
               markerBucketSecond,
               body: normalizedBody,
+              attachmentCount: imageAttachment ? 1 : 0,
               moderationState: "VISIBLE",
+              attachments: imageAttachment
+                ? {
+                    create: {
+                      id: crypto.randomUUID(),
+                      kind: "IMAGE",
+                      storageUrl: imageAttachment.storageUrl,
+                      mimeType: imageAttachment.mimeType,
+                      byteSize: imageAttachment.byteSize,
+                      status: "READY",
+                    },
+                  }
+                : undefined,
             },
             select: {
               id: true,
@@ -522,6 +617,19 @@ export async function createTopLevelComment(input: {
               body: true,
               createdAt: true,
               updatedAt: true,
+              deletedAt: true,
+              attachments: {
+                where: {
+                  status: "READY",
+                },
+                select: {
+                  id: true,
+                  kind: true,
+                  storageUrl: true,
+                  mimeType: true,
+                  byteSize: true,
+                },
+              },
               authorSpotifyUserId: true,
               authorDisplayNameSnapshot: true,
               authorImageUrlSnapshot: true,
@@ -558,6 +666,19 @@ export async function createTopLevelComment(input: {
           body: true,
           createdAt: true,
           updatedAt: true,
+          deletedAt: true,
+          attachments: {
+            where: {
+              status: "READY",
+            },
+            select: {
+              id: true,
+              kind: true,
+              storageUrl: true,
+              mimeType: true,
+              byteSize: true,
+            },
+          },
           authorSpotifyUserId: true,
           authorDisplayNameSnapshot: true,
           authorImageUrlSnapshot: true,
@@ -581,13 +702,15 @@ export async function createReplyComment(input: {
   parentCommentId: string;
   body: string;
   clientSubmissionId: string;
+  imageDataUrl?: string | null;
 }) {
   const viewerSession = await getViewerSession();
   if (!viewerSession?.spotifyUserId) {
     throw new CommentUnauthorizedError("Viewer sign-in is required.");
   }
 
-  const normalizedBody = normalizeBody(input.body);
+  const imageAttachment = normalizeImageAttachment(input.imageDataUrl);
+  const normalizedBody = normalizeBody(input.body, { allowEmpty: Boolean(imageAttachment) });
 
   try {
     return await ensureCommentTables(async () =>
@@ -629,7 +752,20 @@ export async function createReplyComment(input: {
               timestampMs: parent.timestampMs,
               markerBucketSecond: parent.markerBucketSecond,
               body: normalizedBody,
+              attachmentCount: imageAttachment ? 1 : 0,
               moderationState: "VISIBLE",
+              attachments: imageAttachment
+                ? {
+                    create: {
+                      id: crypto.randomUUID(),
+                      kind: "IMAGE",
+                      storageUrl: imageAttachment.storageUrl,
+                      mimeType: imageAttachment.mimeType,
+                      byteSize: imageAttachment.byteSize,
+                      status: "READY",
+                    },
+                  }
+                : undefined,
             },
             select: {
               id: true,
@@ -641,6 +777,19 @@ export async function createReplyComment(input: {
               body: true,
               createdAt: true,
               updatedAt: true,
+              deletedAt: true,
+              attachments: {
+                where: {
+                  status: "READY",
+                },
+                select: {
+                  id: true,
+                  kind: true,
+                  storageUrl: true,
+                  mimeType: true,
+                  byteSize: true,
+                },
+              },
               authorSpotifyUserId: true,
               authorDisplayNameSnapshot: true,
               authorImageUrlSnapshot: true,
@@ -686,6 +835,19 @@ export async function createReplyComment(input: {
           body: true,
           createdAt: true,
           updatedAt: true,
+          deletedAt: true,
+          attachments: {
+            where: {
+              status: "READY",
+            },
+            select: {
+              id: true,
+              kind: true,
+              storageUrl: true,
+              mimeType: true,
+              byteSize: true,
+            },
+          },
           authorSpotifyUserId: true,
           authorDisplayNameSnapshot: true,
           authorImageUrlSnapshot: true,
