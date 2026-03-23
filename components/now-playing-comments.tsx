@@ -2,7 +2,7 @@
 
 "use client";
 
-import { LoaderCircle, MessageCirclePlus, MessagesSquare, X } from "lucide-react";
+import { LoaderCircle, MessageCirclePlus, MessagesSquare, Pencil, Reply, Trash2, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -95,6 +95,74 @@ function applyNewTopLevelComment(
   };
 }
 
+function appendReplyToThread(
+  comments: CommentThread[],
+  reply: CommentThread,
+): CommentThread[] {
+  return comments.map((comment) => {
+    if (comment.id === reply.parentCommentId) {
+      return {
+        ...comment,
+        replies: [...comment.replies, reply].sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
+      };
+    }
+
+    if (!comment.replies.length) {
+      return comment;
+    }
+
+    return {
+      ...comment,
+      replies: appendReplyToThread(comment.replies, reply),
+    };
+  });
+}
+
+function updateCommentInThreads(
+  comments: CommentThread[],
+  updatedComment: CommentThread,
+): CommentThread[] {
+  return comments.map((comment) => {
+    if (comment.id === updatedComment.id) {
+      return {
+        ...comment,
+        ...updatedComment,
+        replies: comment.replies,
+      };
+    }
+
+    if (!comment.replies.length) {
+      return comment;
+    }
+
+    return {
+      ...comment,
+      replies: updateCommentInThreads(comment.replies, updatedComment),
+    };
+  });
+}
+
+function updateMarkerPreview(
+  markers: CommentTrackPayload["markers"],
+  threads: CommentThread[],
+): CommentTrackPayload["markers"] {
+  return markers.map((marker) => {
+    const bucketRoots = threads.filter(
+      (thread) => thread.markerBucketSecond === marker.markerBucketSecond && !thread.parentCommentId,
+    );
+    const latestVisible = [...bucketRoots]
+      .filter((thread) => !thread.deletedAt)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+
+    return {
+      ...marker,
+      previewComment: latestVisible?.body || "Comment deleted",
+      threadCount: bucketRoots.length,
+      commentCount: bucketRoots.length,
+    };
+  });
+}
+
 function formatMs(ms: number) {
   if (!Number.isFinite(ms) || ms <= 0) {
     return "0:00";
@@ -151,6 +219,21 @@ function CommentNode({
   onBucketLeave,
   onSeek,
   seekPending,
+  authStatus,
+  replyingToCommentId,
+  editingCommentId,
+  replyDraft,
+  editDraft,
+  mutationPendingId,
+  mutationError,
+  onReplyStart,
+  onEditStart,
+  onReplyDraftChange,
+  onEditDraftChange,
+  onReplySubmit,
+  onEditSubmit,
+  onDelete,
+  onCancelCompose,
 }: {
   comment: CommentThread;
   depth?: number;
@@ -159,8 +242,28 @@ function CommentNode({
   onBucketLeave: (bucket: number) => void;
   onSeek: (comment: CommentThread) => void;
   seekPending: boolean;
+  authStatus: AuthStatus;
+  replyingToCommentId: string | null;
+  editingCommentId: string | null;
+  replyDraft: string;
+  editDraft: string;
+  mutationPendingId: string | null;
+  mutationError: string | null;
+  onReplyStart: (comment: CommentThread) => void;
+  onEditStart: (comment: CommentThread) => void;
+  onReplyDraftChange: (value: string) => void;
+  onEditDraftChange: (value: string) => void;
+  onReplySubmit: (comment: CommentThread) => void;
+  onEditSubmit: (comment: CommentThread) => void;
+  onDelete: (comment: CommentThread) => void;
+  onCancelCompose: () => void;
 }) {
   const isHighlighted = activeBucket === comment.markerBucketSecond;
+  const isOwner = authStatus.spotifyUserId === comment.author.spotifyUserId;
+  const isReplying = replyingToCommentId === comment.id;
+  const isEditing = editingCommentId === comment.id;
+  const isDeleted = Boolean(comment.deletedAt);
+  const isMutating = mutationPendingId === comment.id;
 
   return (
     <div
@@ -203,8 +306,120 @@ function CommentNode({
             </span>
             <span>{formatMs(comment.timestampMs)}</span>
             <span>{new Date(comment.createdAt).toLocaleString()}</span>
+            {isDeleted ? <span className="text-stone-500">Deleted</span> : null}
           </div>
-          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-stone-100">{comment.body}</p>
+          {isEditing ? (
+            <div
+              className="mt-2"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <textarea
+                value={editDraft}
+                onChange={(event) => onEditDraftChange(event.target.value)}
+                rows={3}
+                className="w-full rounded-2xl border border-white/10 bg-[rgba(10,15,12,0.88)] px-4 py-3 text-sm text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-[--color-accent]"
+              />
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onEditSubmit(comment);
+                  }}
+                  disabled={isMutating || !editDraft.trim()}
+                  className="rounded-full border border-[--color-accent]/45 bg-[--color-accent]/10 px-3 py-1.5 text-xs text-[--color-accent] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isMutating ? "Saving..." : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onCancelCompose();
+                  }}
+                  className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-stone-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className={cn("mt-1 whitespace-pre-wrap text-sm leading-6 text-stone-100", isDeleted && "italic text-stone-500")}>
+              {isDeleted ? "[comment deleted]" : comment.body}
+            </p>
+          )}
+          <div
+            className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-400"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            {authStatus.isViewer ? (
+              <button
+                type="button"
+                onClick={() => onReplyStart(comment)}
+                className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2.5 py-1 transition hover:border-[--color-accent] hover:text-white"
+              >
+                <Reply className="h-3 w-3" />
+                Reply
+              </button>
+            ) : null}
+            {isOwner && !isDeleted ? (
+              <button
+                type="button"
+                onClick={() => onEditStart(comment)}
+                className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2.5 py-1 transition hover:border-[--color-accent] hover:text-white"
+              >
+                <Pencil className="h-3 w-3" />
+                Edit
+              </button>
+            ) : null}
+            {isOwner ? (
+              <button
+                type="button"
+                onClick={() => onDelete(comment)}
+                className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2.5 py-1 transition hover:border-rose-300/50 hover:text-rose-200"
+              >
+                <Trash2 className="h-3 w-3" />
+                Delete
+              </button>
+            ) : null}
+          </div>
+          {isReplying ? (
+            <div
+              className="mt-2"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <textarea
+                value={replyDraft}
+                onChange={(event) => onReplyDraftChange(event.target.value)}
+                rows={3}
+                placeholder="Write a reply..."
+                className="w-full rounded-2xl border border-white/10 bg-[rgba(10,15,12,0.88)] px-4 py-3 text-sm text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-[--color-accent]"
+              />
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onReplySubmit(comment)}
+                  disabled={isMutating || !replyDraft.trim()}
+                  className="rounded-full border border-[--color-accent]/45 bg-[--color-accent]/10 px-3 py-1.5 text-xs text-[--color-accent] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isMutating ? "Replying..." : "Reply"}
+                </button>
+                <button
+                  type="button"
+                  onClick={onCancelCompose}
+                  className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-stone-300"
+                >
+                  Cancel
+                </button>
+              </div>
+              {mutationError && mutationPendingId === null ? (
+                <p className="mt-2 text-xs text-rose-300">{mutationError}</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
       {comment.replies.length ? (
@@ -219,6 +434,21 @@ function CommentNode({
               onBucketLeave={onBucketLeave}
               onSeek={onSeek}
               seekPending={seekPending}
+              authStatus={authStatus}
+              replyingToCommentId={replyingToCommentId}
+              editingCommentId={editingCommentId}
+              replyDraft={replyDraft}
+              editDraft={editDraft}
+              mutationPendingId={mutationPendingId}
+              mutationError={mutationError}
+              onReplyStart={onReplyStart}
+              onEditStart={onEditStart}
+              onReplyDraftChange={onReplyDraftChange}
+              onEditDraftChange={onEditDraftChange}
+              onReplySubmit={onReplySubmit}
+              onEditSubmit={onEditSubmit}
+              onDelete={onDelete}
+              onCancelCompose={onCancelCompose}
             />
           ))}
         </div>
@@ -242,6 +472,12 @@ export function NowPlayingComments({
   const [commentDraft, setCommentDraft] = useState("");
   const [submitPending, setSubmitPending] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [replyDraft, setReplyDraft] = useState("");
+  const [editDraft, setEditDraft] = useState("");
+  const [mutationPendingId, setMutationPendingId] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const [seekPending, setSeekPending] = useState(false);
   const [seekError, setSeekError] = useState<string | null>(null);
   const [openMarkerBucket, setOpenMarkerBucket] = useState<number | null>(null);
@@ -270,6 +506,12 @@ export function NowPlayingComments({
     setComposerOpen(false);
     setSubmitError(null);
     setSeekError(null);
+    setReplyingToCommentId(null);
+    setEditingCommentId(null);
+    setReplyDraft("");
+    setEditDraft("");
+    setMutationPendingId(null);
+    setMutationError(null);
     shownPopupKeysRef.current.clear();
     setPlaybackSessionKey((current) => current + 1);
 
@@ -520,6 +762,123 @@ export function NowPlayingComments({
     }
   }
 
+  async function handleReplySubmit(parent: CommentThread) {
+    if (!replyDraft.trim()) {
+      return;
+    }
+
+    setMutationPendingId(parent.id);
+    setMutationError(null);
+    try {
+      const response = await fetch(`/api/comments/${encodeURIComponent(parent.id)}/replies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          body: replyDraft,
+          clientSubmissionId: crypto.randomUUID(),
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as CommentMutationResponse | null;
+      if (!response.ok || !data?.comment) {
+        setMutationError(data?.error ?? "Could not save your reply.");
+        return;
+      }
+
+      setLocalCommentPayload((current) => {
+        const threads = appendReplyToThread(current.threads, data.comment!);
+        return {
+          ...current,
+          version: data.comment!.updatedAt,
+          threads,
+          markers: updateMarkerPreview(current.markers, threads),
+        };
+      });
+      setReplyDraft("");
+      setReplyingToCommentId(null);
+    } catch {
+      setMutationError("Could not save your reply.");
+    } finally {
+      setMutationPendingId(null);
+    }
+  }
+
+  async function handleEditSubmit(comment: CommentThread) {
+    if (!editDraft.trim()) {
+      return;
+    }
+
+    setMutationPendingId(comment.id);
+    setMutationError(null);
+    try {
+      const response = await fetch(`/api/comments/${encodeURIComponent(comment.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ body: editDraft }),
+      });
+      const data = (await response.json().catch(() => null)) as CommentMutationResponse | null;
+      if (!response.ok || !data?.comment) {
+        setMutationError(data?.error ?? "Could not update your comment.");
+        return;
+      }
+
+      setLocalCommentPayload((current) => {
+        const threads = updateCommentInThreads(current.threads, data.comment!);
+        return {
+          ...current,
+          version: data.comment!.updatedAt,
+          threads,
+          markers: updateMarkerPreview(current.markers, threads),
+        };
+      });
+      setEditingCommentId(null);
+      setEditDraft("");
+    } catch {
+      setMutationError("Could not update your comment.");
+    } finally {
+      setMutationPendingId(null);
+    }
+  }
+
+  async function handleDelete(comment: CommentThread) {
+    setMutationPendingId(comment.id);
+    setMutationError(null);
+    try {
+      const response = await fetch(`/api/comments/${encodeURIComponent(comment.id)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      const data = (await response.json().catch(() => null)) as CommentMutationResponse | null;
+      if (!response.ok || !data?.comment) {
+        setMutationError(data?.error ?? "Could not delete your comment.");
+        return;
+      }
+
+      setLocalCommentPayload((current) => {
+        const threads = updateCommentInThreads(current.threads, data.comment!);
+        return {
+          ...current,
+          version: data.comment!.updatedAt,
+          threads,
+          markers: updateMarkerPreview(current.markers, threads),
+        };
+      });
+      if (editingCommentId === comment.id) {
+        setEditingCommentId(null);
+        setEditDraft("");
+      }
+      if (replyingToCommentId === comment.id) {
+        setReplyingToCommentId(null);
+        setReplyDraft("");
+      }
+    } catch {
+      setMutationError("Could not delete your comment.");
+    } finally {
+      setMutationPendingId(null);
+    }
+  }
+
   return (
     <div className="mt-4 space-y-3" ref={previewContainerRef}>
       <div className="relative pt-5">
@@ -745,6 +1104,39 @@ export function NowPlayingComments({
                     onBucketLeave={handleBucketLeave}
                     onSeek={(comment) => void handleSeek(comment.timestampMs, comment.markerBucketSecond)}
                     seekPending={seekPending}
+                    authStatus={authStatus}
+                    replyingToCommentId={replyingToCommentId}
+                    editingCommentId={editingCommentId}
+                    replyDraft={replyDraft}
+                    editDraft={editDraft}
+                    mutationPendingId={mutationPendingId}
+                    mutationError={mutationError}
+                    onReplyStart={(comment) => {
+                      setReplyingToCommentId(comment.id);
+                      setReplyDraft("");
+                      setEditingCommentId(null);
+                      setEditDraft("");
+                      setMutationError(null);
+                    }}
+                    onEditStart={(comment) => {
+                      setEditingCommentId(comment.id);
+                      setEditDraft(comment.body);
+                      setReplyingToCommentId(null);
+                      setReplyDraft("");
+                      setMutationError(null);
+                    }}
+                    onReplyDraftChange={setReplyDraft}
+                    onEditDraftChange={setEditDraft}
+                    onReplySubmit={(comment) => void handleReplySubmit(comment)}
+                    onEditSubmit={(comment) => void handleEditSubmit(comment)}
+                    onDelete={(comment) => void handleDelete(comment)}
+                    onCancelCompose={() => {
+                      setReplyingToCommentId(null);
+                      setEditingCommentId(null);
+                      setReplyDraft("");
+                      setEditDraft("");
+                      setMutationError(null);
+                    }}
                   />
                 ))}
               </div>

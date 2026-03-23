@@ -24,6 +24,7 @@ export class CommentPlaybackMismatchError extends Error {
   }
 }
 export class CommentValidationError extends Error {}
+export class CommentNotFoundError extends Error {}
 
 type MarkerAuthor = {
   spotifyUserId: string;
@@ -52,6 +53,7 @@ export type CommentThread = {
   body: string;
   createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
   author: MarkerAuthor;
   replies: CommentThread[];
 };
@@ -122,6 +124,38 @@ function mapAuthor(comment: {
     displayName: comment.authorDisplayNameSnapshot,
     imageUrl: comment.authorImageUrlSnapshot,
     profileUrl: comment.authorProfileUrlSnapshot,
+  };
+}
+
+function mapCommentThread(comment: {
+  id: string;
+  trackSpotifyId: string;
+  threadRootId: string;
+  parentCommentId: string | null;
+  timestampMs: number;
+  markerBucketSecond: number;
+  body: string;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt?: Date | null;
+  authorSpotifyUserId: string;
+  authorDisplayNameSnapshot: string | null;
+  authorImageUrlSnapshot: string | null;
+  authorProfileUrlSnapshot: string | null;
+}): CommentThread {
+  return {
+    id: comment.id,
+    trackSpotifyId: comment.trackSpotifyId,
+    threadRootId: comment.threadRootId,
+    parentCommentId: comment.parentCommentId,
+    timestampMs: comment.timestampMs,
+    markerBucketSecond: comment.markerBucketSecond,
+    body: comment.body,
+    createdAt: comment.createdAt.toISOString(),
+    updatedAt: comment.updatedAt.toISOString(),
+    deletedAt: comment.deletedAt?.toISOString() ?? null,
+    author: mapAuthor(comment),
+    replies: [],
   };
 }
 
@@ -212,7 +246,6 @@ export async function getCommentThreads(trackSpotifyId: string): Promise<ReadRes
       const comments = await db.songComment.findMany({
         where: {
           trackSpotifyId,
-          deletedAt: null,
         },
         orderBy: [{ timestampMs: "asc" }, { createdAt: "asc" }],
         select: {
@@ -225,6 +258,7 @@ export async function getCommentThreads(trackSpotifyId: string): Promise<ReadRes
           body: true,
           createdAt: true,
           updatedAt: true,
+          deletedAt: true,
           authorSpotifyUserId: true,
           authorDisplayNameSnapshot: true,
           authorImageUrlSnapshot: true,
@@ -234,19 +268,7 @@ export async function getCommentThreads(trackSpotifyId: string): Promise<ReadRes
 
       const nodes = new Map<string, CommentThread>();
       for (const comment of comments) {
-        nodes.set(comment.id, {
-          id: comment.id,
-          trackSpotifyId: comment.trackSpotifyId,
-          threadRootId: comment.threadRootId,
-          parentCommentId: comment.parentCommentId,
-          timestampMs: comment.timestampMs,
-          markerBucketSecond: comment.markerBucketSecond,
-          body: comment.body,
-          createdAt: comment.createdAt.toISOString(),
-          updatedAt: comment.updatedAt.toISOString(),
-          author: mapAuthor(comment),
-          replies: [],
-        });
+        nodes.set(comment.id, mapCommentThread(comment));
       }
 
       const roots: CommentThread[] = [];
@@ -285,7 +307,6 @@ export async function getCommentTrackPayload(trackSpotifyId: string): Promise<Co
       const comments = await db.songComment.findMany({
         where: {
           trackSpotifyId,
-          deletedAt: null,
         },
         orderBy: [{ timestampMs: "asc" }, { createdAt: "asc" }],
         select: {
@@ -298,6 +319,7 @@ export async function getCommentTrackPayload(trackSpotifyId: string): Promise<Co
           body: true,
           createdAt: true,
           updatedAt: true,
+          deletedAt: true,
           authorSpotifyUserId: true,
           authorDisplayNameSnapshot: true,
           authorImageUrlSnapshot: true,
@@ -308,19 +330,7 @@ export async function getCommentTrackPayload(trackSpotifyId: string): Promise<Co
       const nodes = new Map<string, CommentThread>();
       const topLevelComments = comments.filter((comment) => !comment.parentCommentId);
       for (const comment of comments) {
-        nodes.set(comment.id, {
-          id: comment.id,
-          trackSpotifyId: comment.trackSpotifyId,
-          threadRootId: comment.threadRootId,
-          parentCommentId: comment.parentCommentId,
-          timestampMs: comment.timestampMs,
-          markerBucketSecond: comment.markerBucketSecond,
-          body: comment.body,
-          createdAt: comment.createdAt.toISOString(),
-          updatedAt: comment.updatedAt.toISOString(),
-          author: mapAuthor(comment),
-          replies: [],
-        });
+        nodes.set(comment.id, mapCommentThread(comment));
       }
 
       const threads: CommentThread[] = [];
@@ -336,8 +346,9 @@ export async function getCommentTrackPayload(trackSpotifyId: string): Promise<Co
         threads.push(node);
       }
 
-      const grouped = new Map<number, typeof topLevelComments>();
-      for (const comment of topLevelComments) {
+      const visibleTopLevelComments = topLevelComments.filter((comment) => !comment.deletedAt);
+      const grouped = new Map<number, typeof visibleTopLevelComments>();
+      for (const comment of visibleTopLevelComments) {
         const group = grouped.get(comment.markerBucketSecond) ?? [];
         group.push(comment);
         grouped.set(comment.markerBucketSecond, group);
@@ -523,19 +534,7 @@ export async function createTopLevelComment(input: {
 
         return {
           refreshedViewerSession,
-          comment: {
-            id: comment.id,
-            trackSpotifyId: comment.trackSpotifyId,
-            threadRootId: comment.threadRootId,
-            parentCommentId: comment.parentCommentId,
-            timestampMs: comment.timestampMs,
-            markerBucketSecond: comment.markerBucketSecond,
-            body: comment.body,
-            createdAt: comment.createdAt.toISOString(),
-            updatedAt: comment.updatedAt.toISOString(),
-            author: mapAuthor(comment),
-            replies: [],
-          } satisfies CommentThread,
+          comment: mapCommentThread(comment),
         };
       }, { refreshViewerSession: true }),
     );
@@ -569,19 +568,7 @@ export async function createTopLevelComment(input: {
       if (existing) {
         return {
           refreshedViewerSession: null,
-          comment: {
-            id: existing.id,
-            trackSpotifyId: existing.trackSpotifyId,
-            threadRootId: existing.threadRootId,
-            parentCommentId: existing.parentCommentId,
-            timestampMs: existing.timestampMs,
-            markerBucketSecond: existing.markerBucketSecond,
-            body: existing.body,
-            createdAt: existing.createdAt.toISOString(),
-            updatedAt: existing.updatedAt.toISOString(),
-            author: mapAuthor(existing),
-            replies: [],
-          } satisfies CommentThread,
+          comment: mapCommentThread({ ...existing, deletedAt: null }),
         };
       }
     }
@@ -675,19 +662,7 @@ export async function createReplyComment(input: {
 
         return {
           refreshedViewerSession,
-          comment: {
-            id: comment.id,
-            trackSpotifyId: comment.trackSpotifyId,
-            threadRootId: comment.threadRootId,
-            parentCommentId: comment.parentCommentId,
-            timestampMs: comment.timestampMs,
-            markerBucketSecond: comment.markerBucketSecond,
-            body: comment.body,
-            createdAt: comment.createdAt.toISOString(),
-            updatedAt: comment.updatedAt.toISOString(),
-            author: mapAuthor(comment),
-            replies: [],
-          } satisfies CommentThread,
+          comment: mapCommentThread({ ...comment, deletedAt: null }),
         };
       }, { refreshViewerSession: true }),
     );
@@ -721,19 +696,7 @@ export async function createReplyComment(input: {
       if (existing) {
         return {
           refreshedViewerSession: null,
-          comment: {
-            id: existing.id,
-            trackSpotifyId: existing.trackSpotifyId,
-            threadRootId: existing.threadRootId,
-            parentCommentId: existing.parentCommentId,
-            timestampMs: existing.timestampMs,
-            markerBucketSecond: existing.markerBucketSecond,
-            body: existing.body,
-            createdAt: existing.createdAt.toISOString(),
-            updatedAt: existing.updatedAt.toISOString(),
-            author: mapAuthor(existing),
-            replies: [],
-          } satisfies CommentThread,
+          comment: mapCommentThread({ ...existing, deletedAt: null }),
         };
       }
     }
@@ -748,4 +711,136 @@ export function isRetryableCommentPlaybackError(error: unknown) {
 
 export function isCommentFeatureUnavailable(error: unknown) {
   return isCommentFeatureUnavailableError(error);
+}
+
+export async function updateComment(input: { commentId: string; body: string }) {
+  const viewerSession = await getViewerSession();
+  if (!viewerSession?.spotifyUserId) {
+    throw new CommentUnauthorizedError("Viewer sign-in is required.");
+  }
+
+  const normalizedBody = normalizeBody(input.body);
+
+  return ensureCommentTables(async () => {
+    const comment = await db.songComment.findUnique({
+      where: { id: input.commentId },
+      select: {
+        id: true,
+        trackSpotifyId: true,
+        threadRootId: true,
+        parentCommentId: true,
+        timestampMs: true,
+        markerBucketSecond: true,
+        body: true,
+        createdAt: true,
+        updatedAt: true,
+        deletedAt: true,
+        authorSpotifyUserId: true,
+        authorDisplayNameSnapshot: true,
+        authorImageUrlSnapshot: true,
+        authorProfileUrlSnapshot: true,
+      },
+    });
+
+    if (!comment) {
+      throw new CommentNotFoundError("Comment not found.");
+    }
+
+    if (comment.authorSpotifyUserId !== viewerSession.spotifyUserId) {
+      throw new CommentUnauthorizedError("You can only edit your own comments.");
+    }
+
+    if (comment.deletedAt) {
+      throw new CommentValidationError("Deleted comments cannot be edited.");
+    }
+
+    const updated = await db.songComment.update({
+      where: { id: input.commentId },
+      data: { body: normalizedBody },
+      select: {
+        id: true,
+        trackSpotifyId: true,
+        threadRootId: true,
+        parentCommentId: true,
+        timestampMs: true,
+        markerBucketSecond: true,
+        body: true,
+        createdAt: true,
+        updatedAt: true,
+        deletedAt: true,
+        authorSpotifyUserId: true,
+        authorDisplayNameSnapshot: true,
+        authorImageUrlSnapshot: true,
+        authorProfileUrlSnapshot: true,
+      },
+    });
+
+    return { comment: mapCommentThread(updated) };
+  });
+}
+
+export async function deleteComment(input: { commentId: string }) {
+  const viewerSession = await getViewerSession();
+  if (!viewerSession?.spotifyUserId) {
+    throw new CommentUnauthorizedError("Viewer sign-in is required.");
+  }
+
+  return ensureCommentTables(async () => {
+    const comment = await db.songComment.findUnique({
+      where: { id: input.commentId },
+      select: {
+        id: true,
+        trackSpotifyId: true,
+        threadRootId: true,
+        parentCommentId: true,
+        timestampMs: true,
+        markerBucketSecond: true,
+        body: true,
+        createdAt: true,
+        updatedAt: true,
+        deletedAt: true,
+        authorSpotifyUserId: true,
+        authorDisplayNameSnapshot: true,
+        authorImageUrlSnapshot: true,
+        authorProfileUrlSnapshot: true,
+      },
+    });
+
+    if (!comment) {
+      throw new CommentNotFoundError("Comment not found.");
+    }
+
+    if (comment.authorSpotifyUserId !== viewerSession.spotifyUserId) {
+      throw new CommentUnauthorizedError("You can only delete your own comments.");
+    }
+
+    const deleted =
+      comment.deletedAt
+        ? comment
+        : await db.songComment.update({
+            where: { id: input.commentId },
+            data: {
+              body: "",
+              deletedAt: new Date(),
+            },
+            select: {
+              id: true,
+              trackSpotifyId: true,
+              threadRootId: true,
+              parentCommentId: true,
+              timestampMs: true,
+              markerBucketSecond: true,
+              body: true,
+              createdAt: true,
+              updatedAt: true,
+              deletedAt: true,
+              authorSpotifyUserId: true,
+              authorDisplayNameSnapshot: true,
+              authorImageUrlSnapshot: true,
+              authorProfileUrlSnapshot: true,
+            },
+          });
+
+    return { comment: mapCommentThread(deleted) };
+  });
 }
