@@ -4,6 +4,7 @@ import { env } from "@/lib/env";
 import { SPOTIFY_SCOPE_STRING } from "@/lib/spotify/scopes";
 import type {
   SpotifyCurrentlyPlayingResponse,
+  SpotifyPlaybackStateResponse,
   SpotifyPaging,
   SpotifyPlaylist,
   SpotifyPlaylistTrackItem,
@@ -128,6 +129,34 @@ export function getCurrentlyPlaying(accessToken: string) {
     "/me/player/currently-playing",
     accessToken,
   );
+}
+
+export function getPlaybackState(accessToken: string) {
+  return spotifyRequest<SpotifyPlaybackStateResponse | undefined>("/me/player", accessToken);
+}
+
+export async function playPlayback(accessToken: string) {
+  await spotifyRequest("/me/player/play", accessToken, {
+    method: "PUT",
+  });
+}
+
+export async function pausePlayback(accessToken: string) {
+  await spotifyRequest("/me/player/pause", accessToken, {
+    method: "PUT",
+  });
+}
+
+export async function skipToNext(accessToken: string) {
+  await spotifyRequest("/me/player/next", accessToken, {
+    method: "POST",
+  });
+}
+
+export async function skipToPrevious(accessToken: string) {
+  await spotifyRequest("/me/player/previous", accessToken, {
+    method: "POST",
+  });
 }
 
 export function getPlaylist(accessToken: string, playlistId: string) {

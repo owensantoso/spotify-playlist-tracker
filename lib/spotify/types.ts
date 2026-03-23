@@ -51,6 +51,14 @@ export type SpotifyCurrentlyPlayingResponse = {
   item?: SpotifyTrack | { type: string } | null;
 };
 
+export type SpotifyPlaybackStateResponse = SpotifyCurrentlyPlayingResponse & {
+  device?: {
+    id?: string | null;
+    name?: string | null;
+    is_active?: boolean;
+  } | null;
+};
+
 export type SpotifyPlaylistItemTrack = SpotifyTrack | { type: string } | null;
 
 export type SpotifyPlaylistTrackItem = {
