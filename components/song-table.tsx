@@ -195,12 +195,13 @@ export function SongTable({
           },
         }),
       );
-      window.setTimeout(() => {
-        void fetch("/api/spotify/now-playing", {
-          cache: "no-store",
-          credentials: "same-origin",
-        }).catch(() => null);
-      }, 250);
+      [450, 1200].forEach((delayMs) => {
+        window.dispatchEvent(
+          new CustomEvent("fotm:refresh-now-playing", {
+            detail: { delayMs },
+          }),
+        );
+      });
     } catch {
       setPlayErrorTrackId(row.spotifyTrackId);
     } finally {

@@ -198,6 +198,10 @@ export function Navigation({
     await loadNowPlaying();
   });
 
+  const refreshNowPlaying = useEffectEvent(async () => {
+    await loadNowPlaying();
+  });
+
   useEffect(() => {
     if (!authStatusResolved) {
       return;
@@ -218,6 +222,22 @@ export function Navigation({
       window.clearInterval(interval);
     };
   }, [authStatus.isAuthenticated, authStatusResolved]);
+
+  useEffect(() => {
+    function handleRefreshNowPlaying(event: Event) {
+      const detail = (event as CustomEvent<{ delayMs?: number }>).detail;
+      const delayMs = Math.max(0, detail?.delayMs ?? 0);
+
+      window.setTimeout(() => {
+        void refreshNowPlaying();
+      }, delayMs);
+    }
+
+    window.addEventListener("fotm:refresh-now-playing", handleRefreshNowPlaying as EventListener);
+    return () => {
+      window.removeEventListener("fotm:refresh-now-playing", handleRefreshNowPlaying as EventListener);
+    };
+  }, []);
 
   useEffect(() => {
     if (!nowPlaying?.isPlaying) {
