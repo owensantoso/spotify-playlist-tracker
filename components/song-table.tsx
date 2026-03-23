@@ -304,11 +304,11 @@ export function SongTable({
       </p>
       <table className="min-w-full table-fixed text-left text-[13px]">
         <colgroup>
+          <col className="w-[11%]" />
           <col className="w-[92px]" />
-          <col className="w-[28%]" />
-          <col className="w-[22%]" />
-          <col className="w-[12%]" />
-          <col className="w-[8%]" />
+          <col className="w-[26%]" />
+          <col className="w-[21%]" />
+          <col className="w-[11%]" />
           <col className="w-[8%]" />
           <col className="w-[8%]" />
           <col className="w-[10%]" />
@@ -316,6 +316,13 @@ export function SongTable({
         </colgroup>
         <thead className="text-[11px] uppercase tracking-[0.22em] text-stone-500">
           <tr>
+            <SortableHeader
+              label="Likes"
+              column="likes"
+              sortBy={sortBy}
+              sortDirection={sortDirection}
+              searchQuery={searchQuery}
+            />
             <th className="pb-2.5 pr-4">Artwork</th>
             <SortableHeader
               label="Track"
@@ -341,13 +348,6 @@ export function SongTable({
             <SortableHeader
               label="Added at"
               column="addedAt"
-              sortBy={sortBy}
-              sortDirection={sortDirection}
-              searchQuery={searchQuery}
-            />
-            <SortableHeader
-              label="Likes"
-              column="likes"
               sortBy={sortBy}
               sortDirection={sortDirection}
               searchQuery={searchQuery}
@@ -395,6 +395,49 @@ export function SongTable({
                     "bg-[linear-gradient(90deg,rgba(243,167,92,0.14),rgba(243,167,92,0.06),rgba(106,161,109,0.12))] shadow-[inset_0_0_0_1px_rgba(243,167,92,0.18)]",
                 )}
               >
+                <td className="py-3 pr-4">
+                  <div className="flex min-w-[7.5rem] items-center gap-2">
+                    <button
+                      type="button"
+                      onPointerDown={() => beginLongPress(row)}
+                      onPointerUp={() => finishLongPress(row)}
+                      onPointerLeave={clearLongPress}
+                      onPointerCancel={clearLongPress}
+                      onClick={(event) => event.preventDefault()}
+                      disabled={reactionPendingTrackId === row.spotifyTrackId || !reactionsFeatureAvailable}
+                      className={cn(
+                        "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition duration-200 disabled:cursor-progress disabled:opacity-60",
+                        isSuperLiked
+                          ? "border-[--color-accent] bg-[--color-accent]/18 text-[--color-accent]"
+                          : isLiked
+                            ? "border-emerald-400/60 bg-emerald-400/12 text-emerald-200"
+                            : "border-white/10 text-stone-400 hover:border-[--color-accent]/50 hover:text-stone-100",
+                        isHolding && "scale-110 animate-pulse shadow-[0_0_26px_rgba(243,167,92,0.28)]",
+                      )}
+                      aria-label={isHolding ? `Super-like ${row.title}` : `Like ${row.title}`}
+                      title="Tap for like, hold for super-like"
+                    >
+                      {reactionPendingTrackId === row.spotifyTrackId ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : isSuperLiked || isHolding ? (
+                        <Sparkles className={cn("h-4 w-4", isHolding && "rotate-6")} />
+                      ) : (
+                        <Heart className={cn("h-4 w-4", isLiked && "fill-current")} />
+                      )}
+                    </button>
+                    <div className="w-[4.5rem]">
+                      <p className="text-sm font-medium text-stone-100">{likeScore}</p>
+                      <p className="h-[1rem] overflow-hidden font-mono text-[9px] uppercase tracking-[0.12em] text-stone-500">
+                        {isHolding ? "Super-like" : isSuperLiked ? "Super" : isLiked ? "Liked" : "Like"}
+                      </p>
+                    </div>
+                  </div>
+                  {reactionErrorTrackId === row.spotifyTrackId ? (
+                    <p className="mt-1 text-[11px] text-rose-300">
+                      Could not save your like.
+                    </p>
+                  ) : null}
+                </td>
                 <td className="py-3 pr-4">
                   <div className="relative w-fit">
                     {row.artworkUrl ? (
@@ -505,49 +548,6 @@ export function SongTable({
                 </td>
                 <td className="py-3 pr-4">
                   {row.addedAt ? format(row.addedAt, "MMM d, yyyy") : "Unknown"}
-                </td>
-                <td className="py-3 pr-4">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onPointerDown={() => beginLongPress(row)}
-                      onPointerUp={() => finishLongPress(row)}
-                      onPointerLeave={clearLongPress}
-                      onPointerCancel={clearLongPress}
-                      onClick={(event) => event.preventDefault()}
-                      disabled={reactionPendingTrackId === row.spotifyTrackId || !reactionsFeatureAvailable}
-                      className={cn(
-                        "inline-flex h-9 w-9 items-center justify-center rounded-full border transition duration-200 disabled:cursor-progress disabled:opacity-60",
-                        isSuperLiked
-                          ? "border-[--color-accent] bg-[--color-accent]/18 text-[--color-accent]"
-                          : isLiked
-                            ? "border-emerald-400/60 bg-emerald-400/12 text-emerald-200"
-                            : "border-white/10 text-stone-400 hover:border-[--color-accent]/50 hover:text-stone-100",
-                        isHolding && "scale-110 animate-pulse shadow-[0_0_26px_rgba(243,167,92,0.28)]",
-                      )}
-                      aria-label={isHolding ? `Super-like ${row.title}` : `Like ${row.title}`}
-                      title="Tap for like, hold for super-like"
-                    >
-                      {reactionPendingTrackId === row.spotifyTrackId ? (
-                        <LoaderCircle className="h-4 w-4 animate-spin" />
-                      ) : isSuperLiked || isHolding ? (
-                        <Sparkles className={cn("h-4 w-4", isHolding && "rotate-6")} />
-                      ) : (
-                        <Heart className={cn("h-4 w-4", isLiked && "fill-current")} />
-                      )}
-                    </button>
-                    <div>
-                      <p className="text-sm font-medium text-stone-100">{likeScore}</p>
-                      <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-stone-500">
-                        {isHolding ? "Super-like…" : isSuperLiked ? "Super" : isLiked ? "Liked" : "Like"}
-                      </p>
-                    </div>
-                  </div>
-                  {reactionErrorTrackId === row.spotifyTrackId ? (
-                    <p className="mt-1 text-[11px] text-rose-300">
-                      Could not save your like.
-                    </p>
-                  ) : null}
                 </td>
                 <td className="py-3 pr-4 text-stone-300">
                   {row.commentCount ?? 0}
