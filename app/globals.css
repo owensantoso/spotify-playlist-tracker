@@ -57,8 +57,32 @@ textarea {
   }
 }
 
+@keyframes fotm-danmaku-slide {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  6% {
+    opacity: 1;
+  }
+  94% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(calc(-100vw - 140%), 0, 0);
+    opacity: 0;
+  }
+}
+
 .fotm-eq-bar {
   display: inline-block;
   animation: fotm-equalizer 0.9s ease-in-out infinite;
   transform-origin: bottom;
+}
+
+.fotm-danmaku {
+  animation-name: fotm-danmaku-slide;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  will-change: transform, opacity;
 }

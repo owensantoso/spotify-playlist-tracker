@@ -43,6 +43,14 @@ type NowPlayingCommentsProps = {
   commentPayload: CommentTrackPayload;
 };
 
+type FloatingCommentNotice = {
+  id: string;
+  bucket: number;
+  label: string;
+  top: string;
+  durationMs: number;
+};
+
 function getCommentPreviewLabel(comment: Pick<CommentThread, "body" | "attachments">) {
   const trimmed = comment.body.trim();
   if (trimmed) {
@@ -649,6 +657,7 @@ export function NowPlayingComments({
   const [openMarkerBucket, setOpenMarkerBucket] = useState<number | null>(null);
   const [linkedBucket, setLinkedBucket] = useState<number | null>(null);
   const [popupBucket, setPopupBucket] = useState<number | null>(null);
+  const [floatingNotices, setFloatingNotices] = useState<FloatingCommentNotice[]>([]);
   const [playbackSessionKey, setPlaybackSessionKey] = useState(0);
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const progressRef = useRef(0);
@@ -680,6 +689,7 @@ export function NowPlayingComments({
     setCommentImageDataUrl(null);
     setMutationPendingId(null);
     setMutationError(null);
+    setFloatingNotices([]);
     shownPopupKeysRef.current.clear();
     setPlaybackSessionKey((current) => current + 1);
 
@@ -729,6 +739,21 @@ export function NowPlayingComments({
         `${track.spotifyTrackId}:${currentBucket.markerBucketSecond}:${playbackSessionKey}`,
       );
       setPopupBucket(currentBucket.markerBucketSecond);
+      const noticeId = `${track.spotifyTrackId}:${currentBucket.markerBucketSecond}:${Date.now()}`;
+      const durationMs = 11_000 + Math.round(Math.random() * 2_500);
+      setFloatingNotices((current) => [
+        ...current,
+        {
+          id: noticeId,
+          bucket: currentBucket.markerBucketSecond,
+          label: currentBucket.previewComment,
+          top: `${18 + Math.random() * 52}vh`,
+          durationMs,
+        },
+      ]);
+      window.setTimeout(() => {
+        setFloatingNotices((current) => current.filter((notice) => notice.id !== noticeId));
+      }, durationMs);
       return;
     }
 
@@ -748,7 +773,6 @@ export function NowPlayingComments({
     return Math.max(0, Math.min(100, (progressMs / track.durationMs) * 100));
   }, [progressMs, track?.durationMs]);
 
-  const popupMarker = markers.find((marker) => marker.markerBucketSecond === popupBucket) ?? null;
   const trackDurationMs = track?.durationMs ?? 0;
   const activeCommentBucket = linkedBucket ?? popupBucket ?? openMarkerBucket;
   const footerStatusLabel =
@@ -1060,16 +1084,27 @@ export function NowPlayingComments({
 
   return (
     <div className="mt-4 space-y-3" ref={previewContainerRef}>
+      {floatingNotices.length ? (
+        <div className="pointer-events-none fixed inset-0 z-[70] overflow-hidden">
+          {floatingNotices.map((notice) => (
+            <div
+              key={notice.id}
+              className={cn(
+                "fotm-danmaku absolute left-full whitespace-nowrap px-5 py-2 font-mono text-3xl font-semibold uppercase tracking-[0.08em] text-[--color-accent-strong] md:text-5xl",
+                activeCommentBucket === notice.bucket && "text-white",
+              )}
+              style={{
+                top: notice.top,
+                animationDuration: `${notice.durationMs}ms`,
+                textShadow: "0 6px 22px rgba(0,0,0,0.55), 0 0 18px rgba(255,191,105,0.25)",
+              }}
+            >
+              {notice.label}
+            </div>
+          ))}
+        </div>
+      ) : null}
       <div className="relative pt-5">
-        {popupMarker && track ? (
-          <div className="absolute left-0 top-0 z-20 max-w-sm rounded-2xl border border-[--color-accent]/35 bg-[rgba(23,31,26,0.97)] px-3 py-2 shadow-[0_12px_30px_rgba(0,0,0,0.3)]">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[--color-accent]">
-              Upcoming comment at {formatMs(popupMarker.timestampMsRepresentative)}
-            </p>
-            <p className="mt-1 text-sm text-stone-100">{popupMarker.previewComment}</p>
-          </div>
-        ) : null}
-
         <div className="relative h-2 overflow-visible rounded-full bg-white/8">
           <div
             className="h-full rounded-full bg-[linear-gradient(90deg,rgba(243,167,92,0.92),rgba(106,161,109,0.95))] transition-[width] duration-300"
