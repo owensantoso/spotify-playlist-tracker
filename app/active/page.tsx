@@ -33,16 +33,7 @@ export default async function ActiveSongsPage({ searchParams }: ActiveSongsPageP
   return (
     <div className="mx-auto w-full max-w-7xl px-5 py-8">
       <SectionCard title="Active songs" eyebrow="Current snapshot">
-        <div className="mb-4">
-          <input
-            id="active-search-input"
-            type="search"
-            defaultValue={q ?? ""}
-            placeholder="Search tracks or artists"
-            className="w-full rounded-2xl border border-white/10 bg-black/15 px-4 py-2.5 text-sm text-stone-100 outline-none transition placeholder:text-stone-500 focus:border-[--color-accent]"
-            aria-label="Search active songs"
-          />
-        </div>
+        <ActiveSongsSearchController initialQuery={q ?? ""} />
         <SongTable
           rows={rows.map((row) => ({
             id: row.id,
@@ -68,7 +59,6 @@ export default async function ActiveSongsPage({ searchParams }: ActiveSongsPageP
           sortDirection={sortDirection}
           nowPlayingTrackId={nowPlaying?.spotifyTrackId}
         />
-        <ActiveSongsSearchController />
       </SectionCard>
     </div>
   );

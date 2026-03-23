@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 
 import { SpotifyUserLink } from "@/components/spotify-user-link";
 import type { ActiveSongsSortBy, SortDirection } from "@/lib/services/stats-service";
-import { cn, formatRelativeDuration, getPlaylistStartDate } from "@/lib/utils";
+import { cn, compactSearchText, formatRelativeDuration, getPlaylistStartDate, normalizeSearchText } from "@/lib/utils";
 
 type SongTableRow = {
   id: string;
@@ -167,12 +167,13 @@ export function SongTable({
       <table className="min-w-full table-fixed text-left text-[13px]">
         <colgroup>
           <col className="w-[92px]" />
-          <col className="w-[30%]" />
-          <col className="w-[24%]" />
+          <col className="w-[28%]" />
+          <col className="w-[22%]" />
           <col className="w-[12%]" />
           <col className="w-[8%]" />
-          <col className="w-[12%]" />
+          <col className="w-[9%]" />
           <col className="w-[10%]" />
+          <col className="w-[7%]" />
         </colgroup>
         <thead className="text-[11px] uppercase tracking-[0.22em] text-stone-500">
           <tr>
@@ -213,11 +214,21 @@ export function SongTable({
               sortDirection={sortDirection}
               searchQuery={searchQuery}
             />
+            <th className="pb-2.5 pr-0 text-right">Open</th>
           </tr>
         </thead>
         <tbody id="active-song-body" className="divide-y divide-white/6 text-stone-200">
           {rows.map((row) => {
-            const searchValue = `${row.title} ${row.titleRomanized ?? ""} ${row.artists.join(" ")} ${(row.artistsRomanized ?? []).join(" ")}`.toLocaleLowerCase();
+            const searchValue = [
+              row.title,
+              row.titleRomanized ?? "",
+              row.artists.join(" "),
+              (row.artistsRomanized ?? []).join(" "),
+              row.contributor ?? "",
+              row.contributorSpotifyUserId ?? "",
+            ].join(" ");
+            const normalizedSearchValue = normalizeSearchText(searchValue);
+            const compactSearchValue = compactSearchText(searchValue);
             const isNowPlaying = activeTrackId === row.spotifyTrackId;
 
             return (
@@ -225,6 +236,8 @@ export function SongTable({
                 key={row.id}
                 data-song-row="true"
                 data-search={searchValue}
+                data-search-normalized={normalizedSearchValue}
+                data-search-compact={compactSearchValue}
                 className={cn(
                   "group/song transition-all duration-200 hover:bg-white/[0.035]",
                   isNowPlaying &&
@@ -297,20 +310,9 @@ export function SongTable({
                       {row.titleRomanized}
                     </p>
                   ) : null}
-                  <div className="flex items-center gap-2">
-                    <p className="min-w-0 truncate transition group-hover/song:text-white">
-                      {row.title}
-                    </p>
-                    <a
-                      href={row.spotifyUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 text-stone-400 transition hover:border-[--color-accent] hover:text-[--color-accent]"
-                      aria-label={`Open ${row.title} in Spotify`}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  </div>
+                  <p className="min-w-0 truncate transition group-hover/song:text-white">
+                    {row.title}
+                  </p>
                   {playErrorTrackId === row.spotifyTrackId ? (
                     <p className="mt-1 text-[11px] text-rose-300">
                       Could not start playback. Open Spotify on an active device first.
@@ -358,6 +360,17 @@ export function SongTable({
                 </td>
                 <td className="py-3 pr-4">
                   {formatRelativeDuration(getPlaylistStartDate(row.addedAt, row.firstSeenAt))}
+                </td>
+                <td className="py-3 text-right">
+                  <a
+                    href={row.spotifyUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-stone-400 transition hover:border-[--color-accent] hover:text-[--color-accent]"
+                    aria-label={`Open ${row.title} in Spotify`}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
                 </td>
               </tr>
             );

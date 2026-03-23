@@ -50,3 +50,17 @@ export function absoluteUrl(pathname: string) {
   const base = process.env.APP_URL ?? "http://localhost:3000";
   return new URL(pathname, base).toString();
 }
+
+export function normalizeSearchText(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/\p{M}+/gu, "")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+export function compactSearchText(value: string | null | undefined) {
+  return normalizeSearchText(value).replace(/\s+/g, "");
+}

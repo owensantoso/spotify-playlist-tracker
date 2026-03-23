@@ -237,7 +237,7 @@ export function NowPlayingComments({
 }: NowPlayingCommentsProps) {
   const pathname = usePathname();
   const [localCommentPayload, setLocalCommentPayload] = useState(commentPayload);
-  const [showAllComments, setShowAllComments] = useState(false);
+  const [showAllComments, setShowAllComments] = useState(true);
   const [composerOpen, setComposerOpen] = useState(false);
   const [commentDraft, setCommentDraft] = useState("");
   const [submitPending, setSubmitPending] = useState(false);
