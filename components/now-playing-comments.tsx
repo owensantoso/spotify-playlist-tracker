@@ -27,6 +27,13 @@ type CommentMutationResponse = {
   comment?: CommentTrackPayload["threads"][number];
 };
 
+type PlayerMutationResponse = {
+  ok?: boolean;
+  error?: string;
+  code?: string;
+  status?: number;
+};
+
 type NowPlayingCommentsProps = {
   track: NowPlayingTrack | null;
   progressMs: number;
@@ -142,19 +149,28 @@ function CommentNode({
   activeBucket,
   onBucketEnter,
   onBucketLeave,
+  onSeek,
+  seekPending,
 }: {
   comment: CommentThread;
   depth?: number;
   activeBucket: number | null;
   onBucketEnter: (bucket: number) => void;
   onBucketLeave: (bucket: number) => void;
+  onSeek: (comment: CommentThread) => void;
+  seekPending: boolean;
 }) {
   const isHighlighted = activeBucket === comment.markerBucketSecond;
 
   return (
     <div
+      role="button"
+      tabIndex={seekPending ? -1 : 0}
       className={cn(
-        "rounded-2xl border border-white/8 bg-black/10 p-3 transition",
+        "block w-full rounded-2xl border border-white/8 bg-black/10 p-3 text-left transition",
+        "hover:border-[--color-accent]/35 hover:bg-[--color-accent]/6",
+        "cursor-pointer focus-visible:border-[--color-accent]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[--color-accent]/20",
+        seekPending && "cursor-progress opacity-80",
         isHighlighted && "border-[--color-accent]/45 bg-[--color-accent]/10 shadow-[0_0_0_1px_rgba(243,167,92,0.16)]",
         depth > 0 && "mt-2 ml-4",
       )}
@@ -162,6 +178,21 @@ function CommentNode({
       onMouseLeave={() => onBucketLeave(comment.markerBucketSecond)}
       onFocus={() => onBucketEnter(comment.markerBucketSecond)}
       onBlur={() => onBucketLeave(comment.markerBucketSecond)}
+      onClick={() => {
+        if (!seekPending) {
+          onSeek(comment);
+        }
+      }}
+      onKeyDown={(event) => {
+        if (seekPending) {
+          return;
+        }
+
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSeek(comment);
+        }
+      }}
     >
       <div className="flex items-start gap-3">
         <Avatar author={comment.author} />
@@ -186,6 +217,8 @@ function CommentNode({
               activeBucket={activeBucket}
               onBucketEnter={onBucketEnter}
               onBucketLeave={onBucketLeave}
+              onSeek={onSeek}
+              seekPending={seekPending}
             />
           ))}
         </div>
@@ -209,6 +242,8 @@ export function NowPlayingComments({
   const [commentDraft, setCommentDraft] = useState("");
   const [submitPending, setSubmitPending] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [seekPending, setSeekPending] = useState(false);
+  const [seekError, setSeekError] = useState<string | null>(null);
   const [openMarkerBucket, setOpenMarkerBucket] = useState<number | null>(null);
   const [linkedBucket, setLinkedBucket] = useState<number | null>(null);
   const [popupBucket, setPopupBucket] = useState<number | null>(null);
@@ -234,6 +269,7 @@ export function NowPlayingComments({
     setPopupBucket(null);
     setComposerOpen(false);
     setSubmitError(null);
+    setSeekError(null);
     shownPopupKeysRef.current.clear();
     setPlaybackSessionKey((current) => current + 1);
 
@@ -314,6 +350,67 @@ export function NowPlayingComments({
   function handleBucketLeave(bucket: number) {
     setLinkedBucket((current) => (current === bucket ? null : current));
     setOpenMarkerBucket((current) => (current === bucket ? null : current));
+  }
+
+  async function handleSeek(timestampMs: number, bucket: number) {
+    if (!track || seekPending) {
+      return;
+    }
+
+    setSeekPending(true);
+    setSeekError(null);
+    setLinkedBucket(bucket);
+    setOpenMarkerBucket(bucket);
+    setPopupBucket(bucket);
+
+    try {
+      const response = await fetch("/api/spotify/player", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          action: "seek",
+          positionMs: timestampMs,
+          trackId: track.spotifyTrackId,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as PlayerMutationResponse | null;
+
+      if (!response.ok) {
+        if (payload?.code === "TRACK_CHANGED") {
+          await onRefreshNowPlaying();
+          setSeekError("Playback changed before the seek completed.");
+          return;
+        }
+
+        if (payload?.status === 403) {
+          setSeekError("Reconnect Spotify to grant playback control.");
+          return;
+        }
+
+        if (payload?.status === 409 || payload?.code === "NO_ACTIVE_PLAYBACK") {
+          setSeekError("Open Spotify on an active device first.");
+          return;
+        }
+
+        setSeekError(payload?.error ?? "Could not jump to that comment.");
+        return;
+      }
+
+      await onRefreshNowPlaying();
+      [250, 900].forEach((delay) => {
+        window.setTimeout(() => {
+          void onRefreshNowPlaying();
+        }, delay);
+      });
+    } catch {
+      setSeekError("Could not jump to that comment.");
+    } finally {
+      setSeekPending(false);
+    }
   }
 
   async function handleCommentMutationError(data: CommentMutationResponse | null) {
@@ -461,15 +558,9 @@ export function NowPlayingComments({
                     onMouseEnter={() => handleBucketEnter(marker.markerBucketSecond)}
                     onMouseLeave={() => handleBucketLeave(marker.markerBucketSecond)}
                     onFocus={() => handleBucketEnter(marker.markerBucketSecond)}
-                    onClick={() =>
-                      setOpenMarkerBucket((current) => {
-                        const nextBucket =
-                          current === marker.markerBucketSecond ? null : marker.markerBucketSecond;
-                        setLinkedBucket(nextBucket);
-                        return nextBucket;
-                      })
-                    }
+                    onClick={() => void handleSeek(marker.timestampMsRepresentative, marker.markerBucketSecond)}
                     aria-label={`Comment at ${formatMs(marker.timestampMsRepresentative)} by ${labelBase}`}
+                    disabled={seekPending}
                   >
                     <span className="relative inline-flex items-center justify-center">
                       <span
@@ -522,7 +613,7 @@ export function NowPlayingComments({
 
         <div className="mt-2 flex items-center justify-between gap-4 text-[11px] text-stone-400">
           <span>{formatMs(progressMs)}</span>
-          <span>{controlStatusLabel}</span>
+          <span>{seekError ?? controlStatusLabel}</span>
           <span>{formatMs(track?.durationMs ?? 0)}</span>
         </div>
       </div>
@@ -652,6 +743,8 @@ export function NowPlayingComments({
                     activeBucket={activeCommentBucket}
                     onBucketEnter={handleBucketEnter}
                     onBucketLeave={handleBucketLeave}
+                    onSeek={(comment) => void handleSeek(comment.timestampMs, comment.markerBucketSecond)}
+                    seekPending={seekPending}
                   />
                 ))}
               </div>

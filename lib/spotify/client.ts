@@ -170,6 +170,12 @@ export async function skipToPrevious(accessToken: string) {
   });
 }
 
+export async function seekPlayback(accessToken: string, positionMs: number) {
+  await spotifyRequest(`/me/player/seek?position_ms=${Math.max(0, Math.floor(positionMs))}`, accessToken, {
+    method: "PUT",
+  });
+}
+
 export function getPlaylist(accessToken: string, playlistId: string) {
   return spotifyRequest<SpotifyPlaylist>(`/playlists/${playlistId}`, accessToken);
 }
