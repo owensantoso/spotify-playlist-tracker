@@ -583,6 +583,11 @@ export function NowPlayingComments({
   const popupMarker = markers.find((marker) => marker.markerBucketSecond === popupBucket) ?? null;
   const trackDurationMs = track?.durationMs ?? 0;
   const activeCommentBucket = linkedBucket ?? popupBucket ?? openMarkerBucket;
+  const footerStatusLabel =
+    seekError ??
+    (controlStatusLabel === "Syncing playback..." || controlStatusLabel === "Read-only"
+      ? controlStatusLabel
+      : "");
 
   function handleBucketEnter(bucket: number) {
     setLinkedBucket(bucket);
@@ -972,7 +977,7 @@ export function NowPlayingComments({
 
         <div className="mt-2 flex items-center justify-between gap-4 text-[11px] text-stone-400">
           <span>{formatMs(progressMs)}</span>
-          <span>{seekError ?? controlStatusLabel}</span>
+          <span>{footerStatusLabel}</span>
           <span>{formatMs(track?.durationMs ?? 0)}</span>
         </div>
       </div>

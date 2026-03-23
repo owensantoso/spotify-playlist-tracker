@@ -302,7 +302,7 @@ export function SongTable({
       <p id="active-song-empty" className="hidden text-sm text-stone-400">
         No active songs match this view yet.
       </p>
-      <table className="min-w-full table-fixed text-left text-[13px]">
+      <table className="min-w-full table-separate border-spacing-y-2 text-left text-[13px]">
         <colgroup>
           <col className="w-[11%]" />
           <col className="w-[92px]" />
@@ -363,7 +363,7 @@ export function SongTable({
             <th className="pb-2.5 pr-0 text-right">Open</th>
           </tr>
         </thead>
-        <tbody id="active-song-body" className="divide-y divide-white/6 text-stone-200">
+        <tbody id="active-song-body" className="text-stone-200">
           {displayRows.map((row) => {
             const searchValue = [
               row.title,
@@ -390,12 +390,17 @@ export function SongTable({
                 data-search-normalized={normalizedSearchValue}
                 data-search-compact={compactSearchValue}
                 className={cn(
-                  "group/song transition-all duration-200 hover:bg-white/[0.035]",
-                  isNowPlaying &&
-                    "bg-[linear-gradient(90deg,rgba(243,167,92,0.14),rgba(243,167,92,0.06),rgba(106,161,109,0.12))] shadow-[inset_0_0_0_1px_rgba(243,167,92,0.18)]",
+                  "group/song transition-all duration-200",
                 )}
               >
-                <td className="py-3 pr-4">
+                <td
+                  className={cn(
+                    "py-3 pr-4",
+                    isNowPlaying
+                      ? "rounded-l-[1.35rem] border-y border-l border-[rgba(243,167,92,0.18)] bg-[linear-gradient(90deg,rgba(243,167,92,0.14),rgba(243,167,92,0.08))]"
+                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                  )}
+                >
                   <div className="flex min-w-[7.5rem] items-center gap-2">
                     <button
                       type="button"
@@ -438,7 +443,14 @@ export function SongTable({
                     </p>
                   ) : null}
                 </td>
-                <td className="py-3 pr-4">
+                <td
+                  className={cn(
+                    "py-3 pr-4",
+                    isNowPlaying
+                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
+                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                  )}
+                >
                   <div className="relative w-fit">
                     {row.artworkUrl ? (
                       <>
@@ -490,7 +502,14 @@ export function SongTable({
                     )}
                   </div>
                 </td>
-                <td className="relative py-3 pr-4 font-medium text-stone-100">
+                <td
+                  className={cn(
+                    "relative py-3 pr-4 font-medium text-stone-100",
+                    isNowPlaying
+                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
+                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                  )}
+                >
                   {isNowPlaying ? (
                     <p className="mb-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[--color-accent]">
                       Playing now
@@ -513,7 +532,14 @@ export function SongTable({
                     </p>
                   ) : null}
                 </td>
-                <td className="py-3 pr-4">
+                <td
+                  className={cn(
+                    "py-3 pr-4",
+                    isNowPlaying
+                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
+                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                  )}
+                >
                   {row.artistsRomanized?.some((artist, index) => artist && artist !== row.artists[index]) ? (
                     <p className="mb-0.5 truncate font-mono text-[8px] uppercase leading-[1.15] tracking-[0.04em] text-stone-300">
                       {row.artistsRomanized.join(", ")}
@@ -535,7 +561,14 @@ export function SongTable({
                     ))}
                   </div>
                 </td>
-                <td className="py-3 pr-4">
+                <td
+                  className={cn(
+                    "py-3 pr-4",
+                    isNowPlaying
+                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
+                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                  )}
+                >
                   <SpotifyUserLink
                     name={row.contributor}
                     spotifyUserId={row.contributorSpotifyUserId}
@@ -546,16 +579,44 @@ export function SongTable({
                     textClassName="truncate"
                   />
                 </td>
-                <td className="py-3 pr-4">
+                <td
+                  className={cn(
+                    "py-3 pr-4",
+                    isNowPlaying
+                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
+                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                  )}
+                >
                   {row.addedAt ? format(row.addedAt, "MMM d, yyyy") : "Unknown"}
                 </td>
-                <td className="py-3 pr-4 text-stone-300">
+                <td
+                  className={cn(
+                    "py-3 pr-4 text-stone-300",
+                    isNowPlaying
+                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
+                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                  )}
+                >
                   {row.commentCount ?? 0}
                 </td>
-                <td className="py-3 pr-4">
+                <td
+                  className={cn(
+                    "py-3 pr-4",
+                    isNowPlaying
+                      ? "border-y border-[rgba(243,167,92,0.18)] bg-[rgba(243,167,92,0.06)]"
+                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                  )}
+                >
                   {formatRelativeDuration(getPlaylistStartDate(row.addedAt, row.firstSeenAt))}
                 </td>
-                <td className="py-3 text-right">
+                <td
+                  className={cn(
+                    "py-3 text-right",
+                    isNowPlaying
+                      ? "rounded-r-[1.35rem] border-y border-r border-[rgba(243,167,92,0.18)] bg-[linear-gradient(90deg,rgba(243,167,92,0.06),rgba(106,161,109,0.12))]"
+                      : "border-y border-transparent group-hover/song:bg-white/[0.035]",
+                  )}
+                >
                   <a
                     href={row.spotifyUrl}
                     target="_blank"
