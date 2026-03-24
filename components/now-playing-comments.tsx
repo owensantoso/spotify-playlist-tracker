@@ -2,7 +2,7 @@
 
 "use client";
 
-import { ImagePlus, LoaderCircle, MessageCirclePlus, MessagesSquare, Pencil, Reply, Trash2, X } from "lucide-react";
+import { ImagePlus, LoaderCircle, MessageCirclePlus, MessagesSquare, Mic, Pencil, Reply, Square, Trash2, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -53,6 +53,17 @@ type FloatingCommentNotice = {
   durationMs: number;
 };
 
+type AudioAttachmentState = {
+  dataUrl: string;
+  durationMs: number;
+};
+
+type RecorderTarget = "comment" | "reply";
+
+const MAX_VOICE_NOTE_DURATION_MS = 30_000;
+const MAX_VOICE_NOTE_BYTES = 160_000;
+const TIMELINE_KEYBOARD_STEP_MS = 5_000;
+
 function getCommentPreviewLabel(comment: Pick<CommentThread, "body" | "attachments">) {
   const trimmed = comment.body.trim();
   if (trimmed) {
@@ -61,6 +72,10 @@ function getCommentPreviewLabel(comment: Pick<CommentThread, "body" | "attachmen
 
   if (comment.attachments.some((attachment) => attachment.kind === "IMAGE")) {
     return "Image attachment";
+  }
+
+  if (comment.attachments.some((attachment) => attachment.kind === "AUDIO")) {
+    return "Voice note";
   }
 
   return "Comment";
@@ -197,6 +212,24 @@ function formatMs(ms: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+function clampSeekPosition(positionMs: number, durationMs: number) {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(Math.round(positionMs), durationMs));
+}
+
+function getTimelineSeekPosition(clientX: number, element: HTMLElement, durationMs: number) {
+  const rect = element.getBoundingClientRect();
+  if (!rect.width || durationMs <= 0) {
+    return 0;
+  }
+
+  const ratio = (clientX - rect.left) / rect.width;
+  return clampSeekPosition(ratio * durationMs, durationMs);
+}
+
 function getInitials(name: string | null | undefined) {
   const label = (name ?? "?").trim();
   const words = label.split(/\s+/).filter(Boolean);
@@ -297,6 +330,59 @@ async function compressImageFile(file: File) {
   return dataUrl;
 }
 
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("Could not read the voice note."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function getSupportedVoiceMimeType() {
+  if (typeof MediaRecorder === "undefined") {
+    return "";
+  }
+
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+  ];
+
+  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "";
+}
+
+function AudioAttachmentPreview({
+  audio,
+  className,
+  onRemove,
+}: {
+  audio: AudioAttachmentState;
+  className?: string;
+  onRemove?: () => void;
+}) {
+  return (
+    <div className={cn("mt-3 inline-flex max-w-full flex-col gap-2 rounded-[1.35rem] border border-white/10 bg-black/20 p-3", className)}>
+      <div className="flex items-center justify-between gap-3 text-xs text-stone-400">
+        <span className="font-mono uppercase tracking-[0.16em] text-stone-300">Voice note</span>
+        <span>{formatMs(audio.durationMs)}</span>
+      </div>
+      <audio controls preload="metadata" src={audio.dataUrl} className="max-w-full" />
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="inline-flex items-center justify-center rounded-full border border-white/10 px-3 py-1 text-xs text-stone-300 transition hover:border-white/20 hover:text-white"
+        >
+          Remove voice note
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function CommentImagePreview({
   imageDataUrl,
   className,
@@ -340,6 +426,9 @@ function CommentNode({
   replyDraft,
   editDraft,
   replyImageDataUrl,
+  replyAudio,
+  recordingTarget,
+  recordingElapsedMs,
   mutationPendingId,
   mutationError,
   onReplyMutationError,
@@ -347,11 +436,13 @@ function CommentNode({
   onEditStart,
   onReplyDraftChange,
   onReplyImageChange,
+  onReplyAudioChange,
   onEditDraftChange,
   onReplySubmit,
   onEditSubmit,
   onDelete,
   onCancelCompose,
+  onToggleVoiceRecorder,
 }: {
   comment: CommentThread;
   depth?: number;
@@ -366,6 +457,9 @@ function CommentNode({
   replyDraft: string;
   editDraft: string;
   replyImageDataUrl: string | null;
+  replyAudio: AudioAttachmentState | null;
+  recordingTarget: RecorderTarget | null;
+  recordingElapsedMs: number;
   mutationPendingId: string | null;
   mutationError: string | null;
   onReplyMutationError: (message: string | null) => void;
@@ -373,11 +467,13 @@ function CommentNode({
   onEditStart: (comment: CommentThread) => void;
   onReplyDraftChange: (value: string) => void;
   onReplyImageChange: (value: string | null) => void;
+  onReplyAudioChange: (value: AudioAttachmentState | null) => void;
   onEditDraftChange: (value: string) => void;
   onReplySubmit: (comment: CommentThread) => void;
   onEditSubmit: (comment: CommentThread) => void;
   onDelete: (comment: CommentThread) => void;
   onCancelCompose: () => void;
+  onToggleVoiceRecorder: (target: RecorderTarget) => Promise<void>;
 }) {
   const isHighlighted = activeBucket === comment.markerBucketSecond;
   const isOwner = authStatus.spotifyUserId === comment.author.spotifyUserId;
@@ -385,6 +481,7 @@ function CommentNode({
   const isEditing = editingCommentId === comment.id;
   const isDeleted = Boolean(comment.deletedAt);
   const isMutating = mutationPendingId === comment.id;
+  const isRecordingReply = recordingTarget === "reply";
 
   const replyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -479,11 +576,19 @@ function CommentNode({
                 {isDeleted ? "[comment deleted]" : comment.body}
               </p>
               {!isDeleted
-                ? comment.attachments
-                    .filter((attachment) => attachment.kind === "IMAGE")
-                    .map((attachment) => (
+                ? comment.attachments.map((attachment) =>
+                    attachment.kind === "IMAGE" ? (
                       <CommentImagePreview key={attachment.id} imageDataUrl={attachment.storageUrl} />
-                    ))
+                    ) : (
+                      <AudioAttachmentPreview
+                        key={attachment.id}
+                        audio={{
+                          dataUrl: attachment.storageUrl,
+                          durationMs: attachment.durationMs ?? 0,
+                        }}
+                      />
+                    ),
+                  )
                 : null}
             </>
           )}
@@ -543,6 +648,12 @@ function CommentNode({
                   onRemove={() => onReplyImageChange(null)}
                 />
               ) : null}
+              {replyAudio ? (
+                <AudioAttachmentPreview
+                  audio={replyAudio}
+                  onRemove={() => onReplyAudioChange(null)}
+                />
+              ) : null}
               <div className="mt-2 flex items-center gap-2">
                 <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-xs text-stone-300 transition hover:border-white/20 hover:text-white">
                   <ImagePlus className="h-3.5 w-3.5" />
@@ -572,8 +683,21 @@ function CommentNode({
                 </label>
                 <button
                   type="button"
+                  onClick={() => void onToggleVoiceRecorder("reply")}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition",
+                    isRecordingReply
+                      ? "border-rose-300/45 bg-rose-300/10 text-rose-200"
+                      : "border-white/10 text-stone-300 hover:border-white/20 hover:text-white",
+                  )}
+                >
+                  {isRecordingReply ? <Square className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+                  {isRecordingReply ? `Stop (${formatMs(recordingElapsedMs)})` : "Voice note"}
+                </button>
+                <button
+                  type="button"
                   onClick={() => onReplySubmit(comment)}
-                  disabled={isMutating || (!replyDraft.trim() && !replyImageDataUrl)}
+                  disabled={isMutating || (!replyDraft.trim() && !replyImageDataUrl && !replyAudio)}
                   className="rounded-full border border-[--color-accent]/45 bg-[--color-accent]/10 px-3 py-1.5 text-xs text-[--color-accent] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isMutating ? "Replying..." : "Reply"}
@@ -588,6 +712,11 @@ function CommentNode({
               </div>
               {mutationError && mutationPendingId === null ? (
                 <p className="mt-2 text-xs text-rose-300">{mutationError}</p>
+              ) : null}
+              {isRecordingReply ? (
+                <p className="mt-2 text-xs text-stone-500">
+                  Recording voice note. It will stop automatically at 30 seconds.
+                </p>
               ) : null}
             </div>
           ) : null}
@@ -611,6 +740,9 @@ function CommentNode({
               replyDraft={replyDraft}
               editDraft={editDraft}
               replyImageDataUrl={replyImageDataUrl}
+              replyAudio={replyAudio}
+              recordingTarget={recordingTarget}
+              recordingElapsedMs={recordingElapsedMs}
               mutationPendingId={mutationPendingId}
               mutationError={mutationError}
               onReplyMutationError={onReplyMutationError}
@@ -618,11 +750,13 @@ function CommentNode({
               onEditStart={onEditStart}
               onReplyDraftChange={onReplyDraftChange}
               onReplyImageChange={onReplyImageChange}
+              onReplyAudioChange={onReplyAudioChange}
               onEditDraftChange={onEditDraftChange}
               onReplySubmit={onReplySubmit}
               onEditSubmit={onEditSubmit}
               onDelete={onDelete}
               onCancelCompose={onCancelCompose}
+              onToggleVoiceRecorder={onToggleVoiceRecorder}
             />
           ))}
         </div>
@@ -649,10 +783,12 @@ export function NowPlayingComments({
   const [submitPending, setSubmitPending] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [commentImageDataUrl, setCommentImageDataUrl] = useState<string | null>(null);
+  const [commentAudio, setCommentAudio] = useState<AudioAttachmentState | null>(null);
   const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState("");
   const [replyImageDataUrl, setReplyImageDataUrl] = useState<string | null>(null);
+  const [replyAudio, setReplyAudio] = useState<AudioAttachmentState | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [mutationPendingId, setMutationPendingId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -663,9 +799,16 @@ export function NowPlayingComments({
   const [popupBucket, setPopupBucket] = useState<number | null>(null);
   const [floatingNotices, setFloatingNotices] = useState<FloatingCommentNotice[]>([]);
   const [playbackSessionKey, setPlaybackSessionKey] = useState(0);
+  const [recordingTarget, setRecordingTarget] = useState<RecorderTarget | null>(null);
+  const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const progressRef = useRef(0);
   const shownPopupKeysRef = useRef<Set<string>>(new Set());
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recordingStartRef = useRef<number | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
+  const recordingTimeoutRef = useRef<number | null>(null);
 
   const trackId = track?.spotifyTrackId ?? null;
 
@@ -689,8 +832,10 @@ export function NowPlayingComments({
     setEditingCommentId(null);
     setReplyDraft("");
     setReplyImageDataUrl(null);
+    setReplyAudio(null);
     setEditDraft("");
     setCommentImageDataUrl(null);
+    setCommentAudio(null);
     setMutationPendingId(null);
     setMutationError(null);
     setFloatingNotices([]);
@@ -701,6 +846,19 @@ export function NowPlayingComments({
       return;
     }
   }, [trackId]);
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        window.clearInterval(recordingTimerRef.current);
+      }
+      if (recordingTimeoutRef.current) {
+        window.clearTimeout(recordingTimeoutRef.current);
+      }
+      mediaRecorderRef.current?.stop();
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
 
   useEffect(() => {
     if (progressMs + 1_500 < progressRef.current) {
@@ -778,8 +936,10 @@ export function NowPlayingComments({
   }, [progressMs, track?.durationMs]);
 
   const trackDurationMs = track?.durationMs ?? 0;
+  const timelineSeekEnabled = Boolean(track && trackDurationMs > 0 && interactionEnabled);
   const activeCommentBucket = linkedBucket ?? popupBucket ?? openMarkerBucket;
   const footerStatusLabel =
+    (seekPending ? "Seeking playback..." : null) ??
     seekError ??
     ((!interactionEnabled && track) ? interactionDisabledLabel : "") ??
     (controlStatusLabel === "Syncing playback..." || controlStatusLabel === "Read-only"
@@ -796,16 +956,146 @@ export function NowPlayingComments({
     setOpenMarkerBucket((current) => (current === bucket ? null : current));
   }
 
-  async function handleSeek(timestampMs: number, bucket: number) {
+  function stopActiveRecorder() {
+    if (recordingTimerRef.current) {
+      window.clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (recordingTimeoutRef.current) {
+      window.clearTimeout(recordingTimeoutRef.current);
+      recordingTimeoutRef.current = null;
+    }
+    recordingStartRef.current = null;
+    setRecordingElapsedMs(0);
+    setRecordingTarget(null);
+  }
+
+  async function toggleVoiceRecorder(target: RecorderTarget) {
+    if (recordingTarget === target) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+
+    if (recordingTarget) {
+      setSubmitError("Finish the current voice note first.");
+      return;
+    }
+
+    if (typeof window === "undefined" || typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setSubmitError("Voice notes are not supported in this browser.");
+      return;
+    }
+
+    const mimeType = getSupportedVoiceMimeType();
+    if (!mimeType) {
+      setSubmitError("This browser cannot record compressed voice notes.");
+      return;
+    }
+
+    try {
+      setSubmitError(null);
+      setMutationError(null);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks: Blob[] = [];
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        audioBitsPerSecond: 24_000,
+      });
+
+      mediaRecorderRef.current = recorder;
+      mediaStreamRef.current = stream;
+      setRecordingTarget(target);
+      setRecordingElapsedMs(0);
+      recordingStartRef.current = Date.now();
+      recordingTimerRef.current = window.setInterval(() => {
+        const startedAt = recordingStartRef.current ?? Date.now();
+        setRecordingElapsedMs(Math.min(MAX_VOICE_NOTE_DURATION_MS, Date.now() - startedAt));
+      }, 200);
+      recordingTimeoutRef.current = window.setTimeout(() => {
+        recorder.stop();
+      }, MAX_VOICE_NOTE_DURATION_MS);
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      recorder.onerror = () => {
+        stopActiveRecorder();
+        setSubmitError("Could not record that voice note.");
+      };
+
+      recorder.onstop = () => {
+        const durationMs = Math.max(1, Math.min(MAX_VOICE_NOTE_DURATION_MS, Date.now() - (recordingStartRef.current ?? Date.now())));
+        stopActiveRecorder();
+        mediaRecorderRef.current = null;
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+
+        void (async () => {
+          try {
+            const blob = new Blob(chunks, { type: mimeType });
+            if (!blob.size) {
+              return;
+            }
+            if (blob.size > MAX_VOICE_NOTE_BYTES) {
+              throw new Error("Voice note is still too large after compression.");
+            }
+            const audio = {
+              dataUrl: await blobToDataUrl(blob),
+              durationMs,
+            };
+            if (target === "comment") {
+              setCommentAudio(audio);
+            } else {
+              setReplyAudio(audio);
+            }
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : "Could not save that voice note.";
+            if (target === "comment") {
+              setSubmitError(message);
+              setCommentAudio(null);
+            } else {
+              setMutationError(message);
+              setReplyAudio(null);
+            }
+          }
+        })();
+      };
+
+      recorder.start(250);
+    } catch (error) {
+      stopActiveRecorder();
+      const message =
+        error instanceof Error ? error.message : "Microphone access was not available.";
+      if (target === "comment") {
+        setSubmitError(message);
+      } else {
+        setMutationError(message);
+      }
+    }
+  }
+
+  async function handleSeek({
+    timestampMs,
+    bucket,
+    errorMessage,
+  }: {
+    timestampMs: number;
+    bucket?: number | null;
+    errorMessage: string;
+  }) {
     if (!track || seekPending || !interactionEnabled) {
       return;
     }
 
     setSeekPending(true);
     setSeekError(null);
-    setLinkedBucket(bucket);
-    setOpenMarkerBucket(bucket);
-    setPopupBucket(bucket);
+    setLinkedBucket(bucket ?? null);
+    setOpenMarkerBucket(bucket ?? null);
+    setPopupBucket(bucket ?? null);
 
     try {
       const response = await fetch("/api/spotify/player", {
@@ -840,7 +1130,7 @@ export function NowPlayingComments({
           return;
         }
 
-        setSeekError(payload?.error ?? "Could not jump to that comment.");
+        setSeekError(payload?.error ?? errorMessage);
         return;
       }
 
@@ -851,7 +1141,7 @@ export function NowPlayingComments({
         }, delay);
       });
     } catch {
-      setSeekError("Could not jump to that comment.");
+      setSeekError(errorMessage);
     } finally {
       setSeekPending(false);
     }
@@ -899,6 +1189,8 @@ export function NowPlayingComments({
       body: commentDraft,
       clientSubmissionId: crypto.randomUUID(),
       imageDataUrl: commentImageDataUrl,
+      audioDataUrl: commentAudio?.dataUrl ?? null,
+      audioDurationMs: commentAudio?.durationMs ?? null,
     };
 
     try {
@@ -938,6 +1230,7 @@ export function NowPlayingComments({
             const retryData = (await retryResponse.json().catch(() => null)) as CommentMutationResponse | null;
             setCommentDraft("");
             setCommentImageDataUrl(null);
+            setCommentAudio(null);
             setComposerOpen(false);
             if (retryData?.comment) {
               setLocalCommentPayload((current) => applyNewTopLevelComment(current, retryData.comment!));
@@ -956,6 +1249,7 @@ export function NowPlayingComments({
 
       setCommentDraft("");
       setCommentImageDataUrl(null);
+      setCommentAudio(null);
       setComposerOpen(false);
       if (data?.comment) {
         setLocalCommentPayload((current) => applyNewTopLevelComment(current, data.comment!));
@@ -968,7 +1262,7 @@ export function NowPlayingComments({
   }
 
   async function handleReplySubmit(parent: CommentThread) {
-    if (!replyDraft.trim() && !replyImageDataUrl) {
+    if (!replyDraft.trim() && !replyImageDataUrl && !replyAudio) {
       return;
     }
 
@@ -983,6 +1277,8 @@ export function NowPlayingComments({
           body: replyDraft,
           clientSubmissionId: crypto.randomUUID(),
           imageDataUrl: replyImageDataUrl,
+          audioDataUrl: replyAudio?.dataUrl ?? null,
+          audioDurationMs: replyAudio?.durationMs ?? null,
         }),
       });
       const data = (await response.json().catch(() => null)) as CommentMutationResponse | null;
@@ -1002,6 +1298,7 @@ export function NowPlayingComments({
       });
       setReplyDraft("");
       setReplyImageDataUrl(null);
+      setReplyAudio(null);
       setReplyingToCommentId(null);
     } catch {
       setMutationError("Could not save your reply.");
@@ -1079,6 +1376,7 @@ export function NowPlayingComments({
         setReplyingToCommentId(null);
         setReplyDraft("");
         setReplyImageDataUrl(null);
+        setReplyAudio(null);
       }
     } catch {
       setMutationError("Could not delete your comment.");
@@ -1110,10 +1408,74 @@ export function NowPlayingComments({
         </div>
       ) : null}
       <div className="relative pt-5">
-        <div className="relative h-2 overflow-visible rounded-full bg-white/8">
+        <div className="relative h-5">
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 overflow-visible rounded-full bg-white/8">
+            <div
+              className="h-full rounded-full bg-[linear-gradient(90deg,rgba(243,167,92,0.92),rgba(106,161,109,0.95))] transition-[width] duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
           <div
-            className="h-full rounded-full bg-[linear-gradient(90deg,rgba(243,167,92,0.92),rgba(106,161,109,0.95))] transition-[width] duration-300"
-            style={{ width: `${progressPercent}%` }}
+            role="slider"
+            tabIndex={timelineSeekEnabled && !seekPending ? 0 : -1}
+            aria-label="Playback position"
+            aria-valuemin={0}
+            aria-valuemax={trackDurationMs}
+            aria-valuenow={clampSeekPosition(progressMs, trackDurationMs)}
+            aria-valuetext={`${formatMs(progressMs)} of ${formatMs(trackDurationMs)}`}
+            className={cn(
+              "absolute inset-0 rounded-full outline-none",
+              timelineSeekEnabled
+                ? "cursor-pointer focus-visible:ring-2 focus-visible:ring-[--color-accent]/25"
+                : "cursor-not-allowed",
+              seekPending && "cursor-progress",
+            )}
+            onClick={(event) => {
+              if (!timelineSeekEnabled || seekPending) {
+                return;
+              }
+
+              void handleSeek({
+                timestampMs: getTimelineSeekPosition(event.clientX, event.currentTarget, trackDurationMs),
+                errorMessage: "Could not seek playback.",
+              });
+            }}
+            onKeyDown={(event) => {
+              if (!timelineSeekEnabled || seekPending) {
+                return;
+              }
+
+              let nextPositionMs: number | null = null;
+
+              switch (event.key) {
+                case "ArrowLeft":
+                case "ArrowDown":
+                  nextPositionMs = progressMs - TIMELINE_KEYBOARD_STEP_MS;
+                  break;
+                case "ArrowRight":
+                case "ArrowUp":
+                  nextPositionMs = progressMs + TIMELINE_KEYBOARD_STEP_MS;
+                  break;
+                case "Home":
+                  nextPositionMs = 0;
+                  break;
+                case "End":
+                  nextPositionMs = trackDurationMs;
+                  break;
+                default:
+                  break;
+              }
+
+              if (nextPositionMs == null) {
+                return;
+              }
+
+              event.preventDefault();
+              void handleSeek({
+                timestampMs: clampSeekPosition(nextPositionMs, trackDurationMs),
+                errorMessage: "Could not seek playback.",
+              });
+            }}
           />
 
           {trackDurationMs > 0
@@ -1136,7 +1498,13 @@ export function NowPlayingComments({
                     onMouseEnter={() => handleBucketEnter(marker.markerBucketSecond)}
                     onMouseLeave={() => handleBucketLeave(marker.markerBucketSecond)}
                     onFocus={() => handleBucketEnter(marker.markerBucketSecond)}
-                    onClick={() => void handleSeek(marker.timestampMsRepresentative, marker.markerBucketSecond)}
+                    onClick={() =>
+                      void handleSeek({
+                        timestampMs: marker.timestampMsRepresentative,
+                        bucket: marker.markerBucketSecond,
+                        errorMessage: "Could not jump to that comment.",
+                      })
+                    }
                     aria-label={`Comment at ${formatMs(marker.timestampMsRepresentative)} by ${labelBase}`}
                     disabled={seekPending || !interactionEnabled}
                   >
@@ -1275,6 +1643,9 @@ export function NowPlayingComments({
             {commentImageDataUrl ? (
               <CommentImagePreview imageDataUrl={commentImageDataUrl} onRemove={() => setCommentImageDataUrl(null)} />
             ) : null}
+            {commentAudio ? (
+              <AudioAttachmentPreview audio={commentAudio} onRemove={() => setCommentAudio(null)} />
+            ) : null}
 
             <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-stone-500">
@@ -1309,10 +1680,26 @@ export function NowPlayingComments({
                 </label>
                 <button
                   type="button"
+                  onClick={() => void toggleVoiceRecorder("comment")}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition",
+                    recordingTarget === "comment"
+                      ? "border-rose-300/45 bg-rose-300/10 text-rose-200"
+                      : "border-white/10 text-stone-300 hover:border-white/20 hover:text-white",
+                  )}
+                >
+                  {recordingTarget === "comment" ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  {recordingTarget === "comment"
+                    ? `Stop voice note (${formatMs(recordingElapsedMs)})`
+                    : "Add voice note"}
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     setComposerOpen(false);
                     setSubmitError(null);
                     setCommentImageDataUrl(null);
+                    setCommentAudio(null);
                   }}
                   className="rounded-full border border-white/10 px-4 py-2 text-sm text-stone-300 transition hover:border-white/20 hover:text-white"
                 >
@@ -1321,7 +1708,7 @@ export function NowPlayingComments({
                 <button
                   type="button"
                   onClick={() => void handleSubmitComment()}
-                  disabled={submitPending || !track || (!commentDraft.trim() && !commentImageDataUrl)}
+                  disabled={submitPending || !track || (!commentDraft.trim() && !commentImageDataUrl && !commentAudio)}
                   className="inline-flex items-center gap-2 rounded-full border border-[--color-accent]/45 bg-[--color-accent]/10 px-4 py-2 text-sm text-[--color-accent] transition hover:bg-[--color-accent]/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {submitPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <MessageCirclePlus className="h-4 w-4" />}
@@ -1329,6 +1716,11 @@ export function NowPlayingComments({
                 </button>
               </div>
             </div>
+            {recordingTarget === "comment" ? (
+              <p className="mt-3 text-xs text-stone-500">
+                Recording voice note. It will stop automatically at 30 seconds.
+              </p>
+            ) : null}
 
             {submitError ? <p className="mt-3 text-sm text-rose-300">{submitError}</p> : null}
           </div>
@@ -1353,7 +1745,13 @@ export function NowPlayingComments({
                     activeBucket={activeCommentBucket}
                     onBucketEnter={handleBucketEnter}
                     onBucketLeave={handleBucketLeave}
-                    onSeek={(comment) => void handleSeek(comment.timestampMs, comment.markerBucketSecond)}
+                    onSeek={(comment) =>
+                      void handleSeek({
+                        timestampMs: comment.timestampMs,
+                        bucket: comment.markerBucketSecond,
+                        errorMessage: "Could not jump to that comment.",
+                      })
+                    }
                     seekPending={seekPending}
                     authStatus={authStatus}
                     replyingToCommentId={replyingToCommentId}
@@ -1361,6 +1759,9 @@ export function NowPlayingComments({
                     replyDraft={replyDraft}
                     editDraft={editDraft}
                     replyImageDataUrl={replyImageDataUrl}
+                    replyAudio={replyAudio}
+                    recordingTarget={recordingTarget}
+                    recordingElapsedMs={recordingElapsedMs}
                     mutationPendingId={mutationPendingId}
                     mutationError={mutationError}
                     onReplyMutationError={setMutationError}
@@ -1368,6 +1769,7 @@ export function NowPlayingComments({
                       setReplyingToCommentId(comment.id);
                       setReplyDraft("");
                       setReplyImageDataUrl(null);
+                      setReplyAudio(null);
                       setEditingCommentId(null);
                       setEditDraft("");
                       setMutationError(null);
@@ -1378,19 +1780,23 @@ export function NowPlayingComments({
                       setReplyingToCommentId(null);
                       setReplyDraft("");
                       setReplyImageDataUrl(null);
+                      setReplyAudio(null);
                       setMutationError(null);
                     }}
                     onReplyDraftChange={setReplyDraft}
                     onReplyImageChange={setReplyImageDataUrl}
+                    onReplyAudioChange={setReplyAudio}
                     onEditDraftChange={setEditDraft}
                     onReplySubmit={(comment) => void handleReplySubmit(comment)}
                     onEditSubmit={(comment) => void handleEditSubmit(comment)}
                     onDelete={(comment) => void handleDelete(comment)}
+                    onToggleVoiceRecorder={toggleVoiceRecorder}
                     onCancelCompose={() => {
                       setReplyingToCommentId(null);
                       setEditingCommentId(null);
                       setReplyDraft("");
                       setReplyImageDataUrl(null);
+                      setReplyAudio(null);
                       setEditDraft("");
                       setMutationError(null);
                     }}
