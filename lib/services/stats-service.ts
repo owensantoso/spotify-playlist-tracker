@@ -71,6 +71,8 @@ export type DashboardCharts = {
   removalAgeHistogram: HistogramBucket[];
 };
 
+type PlaylistLifecycleDataset = Awaited<ReturnType<typeof readPlaylistLifecycleDataset>>;
+
 function computeLifetimeMs(startAt: Date, endAt: Date) {
   return endAt.getTime() - startAt.getTime();
 }
@@ -85,6 +87,41 @@ function getDayKey(date: Date) {
 
 function getWeekKey(date: Date) {
   return format(startOfWeek(date, { weekStartsOn: 1 }), "yyyy-MM-dd");
+}
+
+async function readPlaylistLifecycleDataset() {
+  const settings = await getCachedSettings();
+
+  return db.trackLifecycle.findMany({
+    where: {
+      playlistSpotifyId: settings?.mainPlaylistId,
+    },
+    include: {
+      track: true,
+      addedBy: true,
+    },
+  });
+}
+
+const getPlaylistLifecycleDatasetCached = unstable_cache(
+  readPlaylistLifecycleDataset,
+  ["playlist-lifecycle-dataset"],
+  {
+    tags: [
+      cacheTags.overviewStats,
+      cacheTags.lengthStats,
+      cacheTags.activeSongs,
+      cacheTags.recentHistory,
+      cacheTags.contributorLeaderboard,
+      cacheTags.longestLastingSongs,
+      cacheTags.dashboardCharts,
+    ],
+    revalidate: 60,
+  },
+);
+
+async function getPlaylistLifecycleDataset(): Promise<PlaylistLifecycleDataset> {
+  return getPlaylistLifecycleDatasetCached();
 }
 
 function buildContinuousDaySeries(
@@ -104,42 +141,24 @@ function buildContinuousDaySeries(
 
 async function readOverviewStats() {
   const settings = await getCachedSettings();
-  const mainPlaylistId = settings?.mainPlaylistId;
-  const [activeSongsCount, totalUniqueSongs, contributorRows, latestSync, removedLifecycles] =
+  const [lifecycles, latestSync] =
     await Promise.all([
-      db.trackLifecycle.count({
-        where: {
-          status: LifecycleStatus.ACTIVE,
-          playlistSpotifyId: mainPlaylistId,
-        },
-      }),
-      db.trackLifecycle.findMany({
-        where: {
-          playlistSpotifyId: mainPlaylistId,
-        },
-        distinct: ["trackSpotifyId"],
-        select: { trackSpotifyId: true },
-      }),
-      db.trackLifecycle.findMany({
-        where: {
-          playlistSpotifyId: mainPlaylistId,
-          addedBySpotifyUserId: { not: null },
-        },
-        distinct: ["addedBySpotifyUserId"],
-        select: { addedBySpotifyUserId: true },
-      }),
+      getPlaylistLifecycleDataset(),
       db.syncRun.findFirst({ orderBy: { startedAt: "desc" } }),
-      db.trackLifecycle.findMany({
-        where: {
-          status: LifecycleStatus.REMOVED,
-          playlistSpotifyId: mainPlaylistId,
-        },
-        select: { firstSeenAt: true, spotifyAddedAt: true, removedObservedAt: true },
-      }),
     ]);
 
+  const activeSongsCount = lifecycles.filter((lifecycle) => lifecycle.status === LifecycleStatus.ACTIVE).length;
+  const totalUniqueSongs = new Set(lifecycles.map((lifecycle) => lifecycle.trackSpotifyId)).size;
+  const contributorsCount = new Set(
+    lifecycles
+      .map((lifecycle) => lifecycle.addedBySpotifyUserId)
+      .filter((value): value is string => Boolean(value)),
+  ).size;
+  const removedLifecycles = lifecycles.filter(
+    (lifecycle) => lifecycle.status === LifecycleStatus.REMOVED && lifecycle.removedObservedAt,
+  );
+
   const durations = removedLifecycles
-    .filter((item) => item.removedObservedAt)
     .map((item) =>
       computeLifetimeMs(
         getPlaylistStartDate(item.spotifyAddedAt, item.firstSeenAt),
@@ -157,8 +176,8 @@ async function readOverviewStats() {
     publicDashboard: settings?.publicDashboard ?? true,
     syncIntervalMinutes: settings?.syncIntervalMinutes ?? 60,
     activeSongsCount,
-    totalUniqueSongs: totalUniqueSongs.length,
-    contributorsCount: contributorRows.length,
+    totalUniqueSongs,
+    contributorsCount,
     latestSync,
     medianLifetimeLabel: formatLifetimeMs(medianLifetimeMs),
   };
@@ -190,17 +209,9 @@ export async function getOverviewStats() {
 }
 
 async function readLengthStats(limit = 6): Promise<LengthStats> {
-  const settings = await getCachedSettings();
-  const activeLifecycles = await db.trackLifecycle.findMany({
-    where: {
-      status: LifecycleStatus.ACTIVE,
-      playlistSpotifyId: settings?.mainPlaylistId,
-    },
-    include: {
-      track: true,
-      addedBy: true,
-    },
-  });
+  const activeLifecycles = (await getPlaylistLifecycleDataset()).filter(
+    (lifecycle) => lifecycle.status === LifecycleStatus.ACTIVE,
+  );
 
   const durations = activeLifecycles
     .map((lifecycle) => lifecycle.track.durationMs ?? 0)
@@ -316,17 +327,9 @@ async function readActiveSongs({
   sortBy?: ActiveSongsSortBy;
   sortDirection?: SortDirection;
 } = {}) {
-  const settings = await getCachedSettings();
-  const lifecycles = await db.trackLifecycle.findMany({
-    where: {
-      status: LifecycleStatus.ACTIVE,
-      playlistSpotifyId: settings?.mainPlaylistId,
-    },
-    include: {
-      track: true,
-      addedBy: true,
-    },
-  });
+  const lifecycles = (await getPlaylistLifecycleDataset()).filter(
+    (lifecycle) => lifecycle.status === LifecycleStatus.ACTIVE,
+  );
 
   const normalizedQuery = query?.trim().toLocaleLowerCase() ?? "";
 
@@ -406,25 +409,15 @@ export async function getActiveSongs(options: {
 }
 
 async function readRecentHistory(limit = 12) {
-  const settings = await getCachedSettings();
-  const [additionCandidates, recentRemovals] = await Promise.all([
-    db.trackLifecycle.findMany({
-      where: {
-        status: LifecycleStatus.ACTIVE,
-        playlistSpotifyId: settings?.mainPlaylistId,
-      },
-      include: { track: true, addedBy: true },
-    }),
-    db.trackLifecycle.findMany({
-      where: {
-        status: LifecycleStatus.REMOVED,
-        playlistSpotifyId: settings?.mainPlaylistId,
-      },
-      include: { track: true, addedBy: true },
-      orderBy: { removedObservedAt: "desc" },
-      take: limit,
-    }),
-  ]);
+  const lifecycles = await getPlaylistLifecycleDataset();
+  const additionCandidates = lifecycles.filter((lifecycle) => lifecycle.status === LifecycleStatus.ACTIVE);
+  const recentRemovals = lifecycles
+    .filter(
+      (lifecycle) =>
+        lifecycle.status === LifecycleStatus.REMOVED && lifecycle.removedObservedAt,
+    )
+    .sort((left, right) => right.removedObservedAt!.getTime() - left.removedObservedAt!.getTime())
+    .slice(0, limit);
 
   const recentAdditions = additionCandidates
     .sort((left, right) => {
@@ -458,16 +451,9 @@ export async function getRecentHistory(limit = 12) {
 }
 
 async function readContributorLeaderboard() {
-  const settings = await getCachedSettings();
-  const lifecycles = await db.trackLifecycle.findMany({
-    where: {
-      addedBySpotifyUserId: { not: null },
-      playlistSpotifyId: settings?.mainPlaylistId,
-    },
-    include: {
-      addedBy: true,
-    },
-  });
+  const lifecycles = (await getPlaylistLifecycleDataset()).filter(
+    (lifecycle) => lifecycle.addedBySpotifyUserId !== null,
+  );
 
   const contributors = new Map<
     string,
@@ -547,13 +533,7 @@ export async function getContributorLeaderboard() {
 }
 
 async function readLongestLastingSongs(limit = 10) {
-  const settings = await getCachedSettings();
-  const lifecycles = await db.trackLifecycle.findMany({
-    where: {
-      playlistSpotifyId: settings?.mainPlaylistId,
-    },
-    include: { track: true, addedBy: true },
-  });
+  const lifecycles = await getPlaylistLifecycleDataset();
 
   return lifecycles
     .map((lifecycle) => ({
@@ -626,7 +606,7 @@ async function readDashboardCharts(): Promise<DashboardCharts> {
     };
   }
 
-  const [syncRuns, archiveEntries, lifecycles, removedLifecycles] = await Promise.all([
+  const [syncRuns, archiveEntries, lifecycles] = await Promise.all([
     db.syncRun.findMany({
       where: { playlistSpotifyId: mainPlaylistId },
       orderBy: { startedAt: "asc" },
@@ -637,27 +617,11 @@ async function readDashboardCharts(): Promise<DashboardCharts> {
       orderBy: { createdAt: "asc" },
       select: { createdAt: true },
     }),
-    db.trackLifecycle.findMany({
-      where: {
-        playlistSpotifyId: mainPlaylistId,
-      },
-      include: {
-        addedBy: true,
-      },
-    }),
-    db.trackLifecycle.findMany({
-      where: {
-        playlistSpotifyId: mainPlaylistId,
-        status: LifecycleStatus.REMOVED,
-        removedObservedAt: { not: null },
-      },
-      select: {
-        firstSeenAt: true,
-        spotifyAddedAt: true,
-        removedObservedAt: true,
-      },
-    }),
+    getPlaylistLifecycleDataset(),
   ]);
+  const removedLifecycles = lifecycles.filter(
+    (lifecycle) => lifecycle.status === LifecycleStatus.REMOVED && lifecycle.removedObservedAt,
+  );
 
   const activeSongsOverTime = syncRuns.map((run) => ({
     label: format(run.startedAt, "MMM d"),

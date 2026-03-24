@@ -13,6 +13,8 @@ type CreateReplyRequest = {
   body?: string;
   clientSubmissionId?: string;
   imageDataUrl?: string | null;
+  audioDataUrl?: string | null;
+  audioDurationMs?: number | null;
 };
 
 type RouteContext = {
@@ -35,6 +37,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       body: body.body,
       clientSubmissionId: body.clientSubmissionId,
       imageDataUrl: body.imageDataUrl ?? null,
+      audioDataUrl: body.audioDataUrl ?? null,
+      audioDurationMs: body.audioDurationMs ?? null,
     });
 
     const response = NextResponse.json(

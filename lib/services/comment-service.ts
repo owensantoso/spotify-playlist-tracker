@@ -12,6 +12,8 @@ import { upsertSpotifyUserProfile } from "@/lib/services/user-account-service";
 const MAX_COMMENT_LENGTH = 600;
 const PLAYBACK_DRIFT_TOLERANCE_MS = 2_500;
 const MAX_IMAGE_BYTES = 96_000;
+const MAX_AUDIO_BYTES = 160_000;
+const MAX_AUDIO_DURATION_MS = 30_000;
 
 export class CommentFeatureUnavailableError extends Error {}
 export class CommentUnauthorizedError extends Error {}
@@ -61,6 +63,7 @@ export type CommentThread = {
     storageUrl: string;
     mimeType: string | null;
     byteSize: number | null;
+    durationMs: number | null;
   }>;
   author: MarkerAuthor;
   replies: CommentThread[];
@@ -122,9 +125,50 @@ function normalizeImageAttachment(imageDataUrl: string | null | undefined) {
   }
 
   return {
+    kind: "IMAGE" as const,
     storageUrl: `data:${mimeType};base64,${match[2]}`,
     mimeType,
     byteSize,
+    durationMs: null,
+  };
+}
+
+function normalizeAudioAttachment(
+  audioDataUrl: string | null | undefined,
+  durationMs: number | null | undefined,
+) {
+  const value = audioDataUrl?.trim();
+  if (!value) {
+    return null;
+  }
+
+  const match = value.match(/^data:(audio\/(?:webm|ogg)(?:;codecs=[a-z0-9-]+)?);base64,([A-Za-z0-9+/=]+)$/i);
+  if (!match) {
+    throw new CommentValidationError("Only compressed voice notes are supported.");
+  }
+
+  const mimeType = match[1].toLowerCase();
+  const byteSize = Buffer.from(match[2], "base64").byteLength;
+  const normalizedDurationMs = Math.max(0, Math.round(Number(durationMs ?? 0)));
+
+  if (!normalizedDurationMs) {
+    throw new CommentValidationError("Voice note duration is missing.");
+  }
+
+  if (normalizedDurationMs > MAX_AUDIO_DURATION_MS) {
+    throw new CommentValidationError("Voice notes must be 30 seconds or shorter.");
+  }
+
+  if (byteSize > MAX_AUDIO_BYTES) {
+    throw new CommentValidationError("Voice note is still too large after compression.");
+  }
+
+  return {
+    kind: "AUDIO" as const,
+    storageUrl: `data:${mimeType};base64,${match[2]}`,
+    mimeType,
+    byteSize,
+    durationMs: normalizedDurationMs,
   };
 }
 
@@ -166,7 +210,7 @@ function getPreviewComment(body: string, attachmentCount?: number | null) {
   }
 
   if ((attachmentCount ?? 0) > 0) {
-    return "Image attachment";
+    return "Attachment";
   }
 
   return "Comment";
@@ -189,6 +233,7 @@ function mapCommentThread(comment: {
     storageUrl: string;
     mimeType: string | null;
     byteSize: number | null;
+    durationMs: number | null;
   }>;
   authorSpotifyUserId: string;
   authorDisplayNameSnapshot: string | null;
@@ -324,6 +369,7 @@ export async function getCommentThreads(trackSpotifyId: string): Promise<ReadRes
               storageUrl: true,
               mimeType: true,
               byteSize: true,
+              durationMs: true,
             },
           },
           authorSpotifyUserId: true,
@@ -398,6 +444,7 @@ export async function getCommentTrackPayload(trackSpotifyId: string): Promise<Co
               storageUrl: true,
               mimeType: true,
               byteSize: true,
+              durationMs: true,
             },
           },
           authorSpotifyUserId: true,
@@ -520,6 +567,8 @@ export async function createTopLevelComment(input: {
   body: string;
   clientSubmissionId: string;
   imageDataUrl?: string | null;
+  audioDataUrl?: string | null;
+  audioDurationMs?: number | null;
 }) {
   const viewerSession = await getViewerSession();
   if (!viewerSession?.spotifyUserId) {
@@ -527,7 +576,9 @@ export async function createTopLevelComment(input: {
   }
 
   const imageAttachment = normalizeImageAttachment(input.imageDataUrl);
-  const normalizedBody = normalizeBody(input.body, { allowEmpty: Boolean(imageAttachment) });
+  const audioAttachment = normalizeAudioAttachment(input.audioDataUrl, input.audioDurationMs);
+  const attachments = [imageAttachment, audioAttachment].filter((value) => value !== null);
+  const normalizedBody = normalizeBody(input.body, { allowEmpty: attachments.length > 0 });
 
   try {
     return await ensureCommentTables(async () =>
@@ -592,18 +643,19 @@ export async function createTopLevelComment(input: {
               timestampMs: liveProgress,
               markerBucketSecond,
               body: normalizedBody,
-              attachmentCount: imageAttachment ? 1 : 0,
+              attachmentCount: attachments.length,
               moderationState: "VISIBLE",
-              attachments: imageAttachment
+              attachments: attachments.length
                 ? {
-                    create: {
+                    create: attachments.map((attachment) => ({
                       id: crypto.randomUUID(),
-                      kind: "IMAGE",
-                      storageUrl: imageAttachment.storageUrl,
-                      mimeType: imageAttachment.mimeType,
-                      byteSize: imageAttachment.byteSize,
+                      kind: attachment.kind,
+                      storageUrl: attachment.storageUrl,
+                      mimeType: attachment.mimeType,
+                      byteSize: attachment.byteSize,
+                      durationMs: attachment.durationMs,
                       status: "READY",
-                    },
+                    })),
                   }
                 : undefined,
             },
@@ -628,6 +680,7 @@ export async function createTopLevelComment(input: {
                   storageUrl: true,
                   mimeType: true,
                   byteSize: true,
+                  durationMs: true,
                 },
               },
               authorSpotifyUserId: true,
@@ -677,6 +730,7 @@ export async function createTopLevelComment(input: {
               storageUrl: true,
               mimeType: true,
               byteSize: true,
+              durationMs: true,
             },
           },
           authorSpotifyUserId: true,
@@ -703,6 +757,8 @@ export async function createReplyComment(input: {
   body: string;
   clientSubmissionId: string;
   imageDataUrl?: string | null;
+  audioDataUrl?: string | null;
+  audioDurationMs?: number | null;
 }) {
   const viewerSession = await getViewerSession();
   if (!viewerSession?.spotifyUserId) {
@@ -710,7 +766,9 @@ export async function createReplyComment(input: {
   }
 
   const imageAttachment = normalizeImageAttachment(input.imageDataUrl);
-  const normalizedBody = normalizeBody(input.body, { allowEmpty: Boolean(imageAttachment) });
+  const audioAttachment = normalizeAudioAttachment(input.audioDataUrl, input.audioDurationMs);
+  const attachments = [imageAttachment, audioAttachment].filter((value) => value !== null);
+  const normalizedBody = normalizeBody(input.body, { allowEmpty: attachments.length > 0 });
 
   try {
     return await ensureCommentTables(async () =>
@@ -752,18 +810,19 @@ export async function createReplyComment(input: {
               timestampMs: parent.timestampMs,
               markerBucketSecond: parent.markerBucketSecond,
               body: normalizedBody,
-              attachmentCount: imageAttachment ? 1 : 0,
+              attachmentCount: attachments.length,
               moderationState: "VISIBLE",
-              attachments: imageAttachment
+              attachments: attachments.length
                 ? {
-                    create: {
+                    create: attachments.map((attachment) => ({
                       id: crypto.randomUUID(),
-                      kind: "IMAGE",
-                      storageUrl: imageAttachment.storageUrl,
-                      mimeType: imageAttachment.mimeType,
-                      byteSize: imageAttachment.byteSize,
+                      kind: attachment.kind,
+                      storageUrl: attachment.storageUrl,
+                      mimeType: attachment.mimeType,
+                      byteSize: attachment.byteSize,
+                      durationMs: attachment.durationMs,
                       status: "READY",
-                    },
+                    })),
                   }
                 : undefined,
             },
@@ -788,6 +847,7 @@ export async function createReplyComment(input: {
                   storageUrl: true,
                   mimeType: true,
                   byteSize: true,
+                  durationMs: true,
                 },
               },
               authorSpotifyUserId: true,
@@ -846,6 +906,7 @@ export async function createReplyComment(input: {
               storageUrl: true,
               mimeType: true,
               byteSize: true,
+              durationMs: true,
             },
           },
           authorSpotifyUserId: true,

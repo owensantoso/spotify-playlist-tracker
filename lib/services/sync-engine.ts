@@ -48,6 +48,27 @@ type SyncDebugPayload = {
   knownContributorSample: SyncDebugItem[];
 };
 
+type TrackCatalogRecord = {
+  spotifyTrackId: string;
+  name: string;
+  nameRomanized: string | null;
+  artistNames: string[];
+  artistNamesRomanized: string[];
+  artistSpotifyUrls: string[];
+  albumName: string | null;
+  artworkUrl: string | null;
+  spotifyUrl: string;
+  spotifyUri: string;
+  durationMs: number | null;
+  explicit: boolean | null;
+};
+
+type ContributorRecord = {
+  spotifyUserId: string;
+  displayName: string | null;
+  profileUrl: string | null;
+};
+
 function toSyncDebugItem(item: Awaited<ReturnType<typeof getAllPlaylistItems>>[number]): SyncDebugItem {
   const track =
     item.track && item.track.type === "track" && "id" in item.track ? item.track : null;
@@ -138,53 +159,158 @@ async function upsertNormalizedCatalog(
     }
   }
 
-  await Promise.all([
-    ...tracks.map((track) =>
-      tx.track.upsert({
+  const trackIds = [...new Set(tracks.map((track) => track.trackId))];
+  const contributorIds = [...contributors.keys()];
+
+  const [existingTracks, existingContributors] = await Promise.all([
+    trackIds.length
+      ? tx.track.findMany({
+          where: {
+            spotifyTrackId: {
+              in: trackIds,
+            },
+          },
+          select: {
+            spotifyTrackId: true,
+            name: true,
+            nameRomanized: true,
+            artistNames: true,
+            artistNamesRomanized: true,
+            artistSpotifyUrls: true,
+            albumName: true,
+            artworkUrl: true,
+            spotifyUrl: true,
+            spotifyUri: true,
+            durationMs: true,
+            explicit: true,
+          },
+        })
+      : Promise.resolve([]),
+    contributorIds.length
+      ? tx.spotifyUser.findMany({
+          where: {
+            spotifyUserId: {
+              in: contributorIds,
+            },
+          },
+          select: {
+            spotifyUserId: true,
+            displayName: true,
+            profileUrl: true,
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const existingTracksById = new Map(
+    existingTracks.map((track) => [track.spotifyTrackId, track] satisfies [string, TrackCatalogRecord]),
+  );
+  const existingContributorsById = new Map(
+    existingContributors.map(
+      (contributor) => [contributor.spotifyUserId, contributor] satisfies [string, ContributorRecord],
+    ),
+  );
+
+  const tracksToCreate: Prisma.TrackCreateManyInput[] = [];
+  const trackUpdates: Array<Promise<unknown>> = [];
+
+  for (const track of tracks) {
+    const nextValues = {
+      name: track.trackName,
+      nameRomanized: track.trackNameRomanized,
+      artistNames: track.artistNames,
+      artistNamesRomanized: track.artistNamesRomanized,
+      artistSpotifyUrls: track.artistSpotifyUrls,
+      albumName: track.albumName,
+      artworkUrl: track.artworkUrl,
+      spotifyUrl: track.spotifyUrl,
+      spotifyUri: track.spotifyUri,
+      durationMs: track.durationMs,
+      explicit: track.explicit,
+    } satisfies Omit<Prisma.TrackCreateManyInput, "spotifyTrackId">;
+    const existing = existingTracksById.get(track.trackId);
+
+    if (!existing) {
+      tracksToCreate.push({
+        spotifyTrackId: track.trackId,
+        ...nextValues,
+      });
+      continue;
+    }
+
+    const changed =
+      existing.name !== nextValues.name ||
+      existing.nameRomanized !== nextValues.nameRomanized ||
+      JSON.stringify(existing.artistNames) !== JSON.stringify(nextValues.artistNames) ||
+      JSON.stringify(existing.artistNamesRomanized) !== JSON.stringify(nextValues.artistNamesRomanized) ||
+      JSON.stringify(existing.artistSpotifyUrls) !== JSON.stringify(nextValues.artistSpotifyUrls) ||
+      existing.albumName !== nextValues.albumName ||
+      existing.artworkUrl !== nextValues.artworkUrl ||
+      existing.spotifyUrl !== nextValues.spotifyUrl ||
+      existing.spotifyUri !== nextValues.spotifyUri ||
+      existing.durationMs !== nextValues.durationMs ||
+      existing.explicit !== nextValues.explicit;
+
+    if (!changed) {
+      continue;
+    }
+
+    trackUpdates.push(
+      tx.track.update({
         where: { spotifyTrackId: track.trackId },
-        update: {
-          name: track.trackName,
-          nameRomanized: track.trackNameRomanized,
-          artistNames: track.artistNames,
-          artistNamesRomanized: track.artistNamesRomanized,
-          artistSpotifyUrls: track.artistSpotifyUrls,
-          albumName: track.albumName,
-          artworkUrl: track.artworkUrl,
-          spotifyUrl: track.spotifyUrl,
-          spotifyUri: track.spotifyUri,
-          durationMs: track.durationMs,
-          explicit: track.explicit,
-        },
-        create: {
-          spotifyTrackId: track.trackId,
-          name: track.trackName,
-          nameRomanized: track.trackNameRomanized,
-          artistNames: track.artistNames,
-          artistNamesRomanized: track.artistNamesRomanized,
-          artistSpotifyUrls: track.artistSpotifyUrls,
-          albumName: track.albumName,
-          artworkUrl: track.artworkUrl,
-          spotifyUrl: track.spotifyUrl,
-          spotifyUri: track.spotifyUri,
-          durationMs: track.durationMs,
-          explicit: track.explicit,
-        },
+        data: nextValues,
       }),
-    ),
-    ...[...contributors.entries()].map(([spotifyUserId, contributor]) =>
-      tx.spotifyUser.upsert({
+    );
+  }
+
+  const contributorsToCreate: Prisma.SpotifyUserCreateManyInput[] = [];
+  const contributorUpdates: Array<Promise<unknown>> = [];
+
+  for (const [spotifyUserId, contributor] of contributors.entries()) {
+    const existing = existingContributorsById.get(spotifyUserId);
+    const nextValues = {
+      displayName: contributor.displayName,
+      profileUrl: contributor.profileUrl,
+    } satisfies Omit<Prisma.SpotifyUserCreateManyInput, "spotifyUserId">;
+
+    if (!existing) {
+      contributorsToCreate.push({
+        spotifyUserId,
+        ...nextValues,
+      });
+      continue;
+    }
+
+    if (
+      existing.displayName === nextValues.displayName &&
+      existing.profileUrl === nextValues.profileUrl
+    ) {
+      continue;
+    }
+
+    contributorUpdates.push(
+      tx.spotifyUser.update({
         where: { spotifyUserId },
-        update: {
-          displayName: contributor.displayName,
-          profileUrl: contributor.profileUrl,
-        },
-        create: {
-          spotifyUserId,
-          displayName: contributor.displayName,
-          profileUrl: contributor.profileUrl,
-        },
+        data: nextValues,
       }),
-    ),
+    );
+  }
+
+  await Promise.all([
+    tracksToCreate.length
+      ? tx.track.createMany({
+          data: tracksToCreate,
+          skipDuplicates: true,
+        })
+      : Promise.resolve(),
+    contributorsToCreate.length
+      ? tx.spotifyUser.createMany({
+          data: contributorsToCreate,
+          skipDuplicates: true,
+        })
+      : Promise.resolve(),
+    ...trackUpdates,
+    ...contributorUpdates,
   ]);
 }
 
@@ -254,9 +380,9 @@ export async function runSync(triggerSource: SyncTriggerSource) {
         });
       }
 
-      for (const lifecycle of reconciliation.lifecyclesToCreate) {
-        await tx.trackLifecycle.create({
-          data: {
+      if (reconciliation.lifecyclesToCreate.length > 0) {
+        await tx.trackLifecycle.createMany({
+          data: reconciliation.lifecyclesToCreate.map((lifecycle) => ({
             playlistSpotifyId: settings.mainPlaylistId,
             trackSpotifyId: lifecycle.trackId,
             addedBySpotifyUserId: lifecycle.addedBySpotifyUserId,
@@ -266,7 +392,7 @@ export async function runSync(triggerSource: SyncTriggerSource) {
             status: LifecycleStatus.ACTIVE,
             matchFingerprint: lifecycle.matchFingerprint,
             occurrenceOrdinal: lifecycle.occurrenceOrdinal,
-          },
+          })),
         });
       }
 
