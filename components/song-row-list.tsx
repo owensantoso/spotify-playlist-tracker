@@ -91,16 +91,16 @@ export function SongRowList({
                   </div>
                 )}
               </a>
-              <div>
+              <div className="space-y-px">
                 {isNowPlaying ? (
                   <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-[--color-accent]">Playing now</p>
                 ) : null}
                 {item.titleRomanized ? (
-                  <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-stone-400">{item.titleRomanized}</p>
+                  <p className="font-mono text-[9px] uppercase leading-none tracking-[0.08em] text-stone-400">{item.titleRomanized}</p>
                 ) : null}
                 <Link
                   href={`/songs/${encodeURIComponent(item.spotifyTrackId)}`}
-                  className="text-sm font-medium text-stone-100 transition hover:text-[--color-accent] md:text-[15px]"
+                  className="text-sm font-medium leading-tight text-stone-100 transition hover:text-[--color-accent] md:text-[15px]"
                 >
                   {item.title}
                 </Link>

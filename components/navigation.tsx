@@ -431,13 +431,22 @@ export function Navigation({
                   {nowPlaying ? (nowPlaying.isPlaying ? "Now playing" : "Paused") : "Now playing"}
                 </p>
                 {nowPlaying?.titleRomanized ? (
-                  <p className="mt-1 truncate font-mono text-[11px] uppercase tracking-[0.1em] text-stone-400">
+                  <p className="mt-0.5 truncate font-mono text-[11px] uppercase leading-none tracking-[0.1em] text-stone-400">
                     {nowPlaying.titleRomanized}
                   </p>
                 ) : null}
-                <p className="mt-1 truncate text-[1.85rem] font-semibold leading-none tracking-tight text-stone-100 lg:text-[2.2rem]">
-                  {nowPlaying?.title ?? "Nothing is playing right now"}
-                </p>
+                {nowPlaying ? (
+                  <Link
+                    href={`/songs/${encodeURIComponent(nowPlaying.spotifyTrackId)}`}
+                    className="mt-0.5 block truncate text-[1.85rem] font-semibold leading-none tracking-tight text-stone-100 transition hover:text-[--color-accent] lg:text-[2.2rem]"
+                  >
+                    {nowPlaying.title}
+                  </Link>
+                ) : (
+                  <p className="mt-0.5 truncate text-[1.85rem] font-semibold leading-none tracking-tight text-stone-100 lg:text-[2.2rem]">
+                    Nothing is playing right now
+                  </p>
+                )}
                 {nowPlaying?.artistsRomanized?.some((artist, index) => artist && artist !== nowPlaying.artists[index]) ? (
                   <p className="mt-3 truncate font-mono text-[11px] text-stone-400 lg:text-[12px]">
                     {nowPlaying.artistsRomanized.join(", ")}

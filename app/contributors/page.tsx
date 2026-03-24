@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { SpotifyUserLink } from "@/components/spotify-user-link";
 import { SectionCard } from "@/components/section-card";
 import { getSpotifyUserAvatarMap } from "@/lib/services/spotify-user-service";
@@ -63,14 +65,12 @@ export default async function ContributorsPage() {
                   {lifecycle.track.nameRomanized}
                 </p>
               ) : null}
-              <a
-                href={lifecycle.track.spotifyUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-stone-100 hover:text-[--color-accent]"
+              <Link
+                href={`/songs/${encodeURIComponent(lifecycle.track.spotifyTrackId)}`}
+                className="font-medium leading-tight text-stone-100 transition hover:text-[--color-accent]"
               >
                 {lifecycle.track.name}
-              </a>
+              </Link>
               {lifecycle.track.artistNamesRomanized.some((artist, index) => artist && artist !== lifecycle.track.artistNames[index]) ? (
                 <p className="font-mono text-[9px] text-stone-400">
                   {lifecycle.track.artistNamesRomanized.join(", ")}

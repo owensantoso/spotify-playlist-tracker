@@ -1,4 +1,5 @@
 import { format } from "date-fns";
+import Link from "next/link";
 
 import { ActiveTrendCard, ContributorShareCard, HeatmapCard, HistogramCard, RankingBarCard } from "@/components/dashboard-charts";
 import { SectionCard } from "@/components/section-card";
@@ -94,11 +95,19 @@ export default async function HomePage() {
                   <div key={item.id} className="flex items-center justify-between gap-4">
                     <div>
                       {item.titleRomanized ? (
-                        <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-stone-400">
+                        <p className="font-mono text-[9px] uppercase leading-none tracking-[0.08em] text-stone-400">
                           {item.titleRomanized}
                         </p>
                       ) : null}
-                      <p className="text-sm font-medium text-stone-100">{index + 1}. {item.title}</p>
+                      <p className="text-sm font-medium leading-tight text-stone-100">
+                        {index + 1}.{" "}
+                        <Link
+                          href={`/songs/${encodeURIComponent(item.spotifyTrackId)}`}
+                          className="transition hover:text-[--color-accent]"
+                        >
+                          {item.title}
+                        </Link>
+                      </p>
                       {item.artistsRomanized.some((artist, artistIndex) => artist && artist !== item.artists[artistIndex]) ? (
                         <p className="font-mono text-[9px] text-stone-400">{item.artistsRomanized.join(", ")}</p>
                       ) : null}
@@ -119,11 +128,19 @@ export default async function HomePage() {
                   <div key={item.id} className="flex items-center justify-between gap-4">
                     <div>
                       {item.titleRomanized ? (
-                        <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-stone-400">
+                        <p className="font-mono text-[9px] uppercase leading-none tracking-[0.08em] text-stone-400">
                           {item.titleRomanized}
                         </p>
                       ) : null}
-                      <p className="text-sm font-medium text-stone-100">{index + 1}. {item.title}</p>
+                      <p className="text-sm font-medium leading-tight text-stone-100">
+                        {index + 1}.{" "}
+                        <Link
+                          href={`/songs/${encodeURIComponent(item.spotifyTrackId)}`}
+                          className="transition hover:text-[--color-accent]"
+                        >
+                          {item.title}
+                        </Link>
+                      </p>
                       {item.artistsRomanized.some((artist, artistIndex) => artist && artist !== item.artists[artistIndex]) ? (
                         <p className="font-mono text-[9px] text-stone-400">{item.artistsRomanized.join(", ")}</p>
                       ) : null}

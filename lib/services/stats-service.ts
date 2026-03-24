@@ -47,6 +47,7 @@ export type HistogramBucket = {
 
 export type ActiveTrackLengthItem = {
   id: string;
+  spotifyTrackId: string;
   title: string;
   titleRomanized: string | null;
   artists: string[];
@@ -227,6 +228,7 @@ async function readLengthStats(limit = 6): Promise<LengthStats> {
     .filter((lifecycle) => lifecycle.track.durationMs != null)
     .map((lifecycle) => ({
       id: lifecycle.id,
+      spotifyTrackId: lifecycle.track.spotifyTrackId,
       title: lifecycle.track.name,
       titleRomanized: lifecycle.track.nameRomanized,
       artists: lifecycle.track.artistNames,
