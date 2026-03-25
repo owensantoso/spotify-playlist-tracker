@@ -4,6 +4,9 @@ Flavor of the Moment Tracker is a small full-stack app for watching one collabor
 
 It preserves playlist history, tracks each song’s lifecycle, mirrors unique songs into an archive playlist, surfaces contributor and longevity stats, and can optionally post Discord notifications when new songs appear.
 
+<img width="1324" height="891" alt="image" src="https://github.com/user-attachments/assets/92ac9010-ccee-43a9-8b67-5022140d5f3f" />
+
+
 ## Feature Summary
 
 - Single-admin Spotify OAuth flow with server-side token storage and refresh
