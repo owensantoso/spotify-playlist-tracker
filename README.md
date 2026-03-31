@@ -6,6 +6,9 @@ It preserves playlist history, tracks each song’s lifecycle, mirrors unique so
 
 <img width="1324" height="891" alt="image" src="https://github.com/user-attachments/assets/92ac9010-ccee-43a9-8b67-5022140d5f3f" />
 
+<img width="1183" height="806" alt="Screenshot 2026-04-01 at 03 30 35" src="https://github.com/user-attachments/assets/8525d8fb-3a6b-45ba-9007-d6218e823e42" />
+
+
 
 ## Feature Summary
 
