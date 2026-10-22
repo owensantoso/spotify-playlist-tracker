@@ -153,6 +153,7 @@ export function SongTable({
   }, [reactionState, rows, sortBy, sortDirection]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Reconcile optimistic reaction state with refreshed server rows.
     setReactionState(
       rows.reduce<Record<string, { score: number; viewerReaction: SongReactionKind | null }>>((acc, row) => {
         acc[row.spotifyTrackId] = {
@@ -254,7 +255,8 @@ export function SongTable({
       const confirmedViewerReaction = payload?.viewerReaction ?? null;
 
       if (response.status === 401) {
-        window.location.href = `/api/auth/spotify/login?mode=viewer&next=${encodeURIComponent(pathname || "/active")}`;
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- OAuth requires a full navigation through the login route's external redirect.
+        window.location.assign(`/api/auth/spotify/login?mode=viewer&next=${encodeURIComponent(pathname || "/active")}`);
         return;
       }
 

@@ -12,7 +12,10 @@ describe("reconcileLifecycles", () => {
         {
           trackId: "track-1",
           trackName: "Track 1",
+          trackNameRomanized: null,
           artistNames: ["Artist 1"],
+          artistNamesRomanized: [],
+          artistSpotifyUrls: [],
           albumName: "Album",
           artworkUrl: null,
           spotifyUrl: "https://open.spotify.com/track/track-1",
@@ -50,7 +53,10 @@ describe("reconcileLifecycles", () => {
         {
           trackId: "track-1",
           trackName: "Track 1",
+          trackNameRomanized: null,
           artistNames: ["Artist 1"],
+          artistNamesRomanized: [],
+          artistSpotifyUrls: [],
           albumName: "Album",
           artworkUrl: null,
           spotifyUrl: "https://open.spotify.com/track/track-1",

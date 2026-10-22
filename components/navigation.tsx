@@ -207,6 +207,7 @@ export function Navigation({
     }
 
     if (!authStatus.isAuthenticated) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clear remote playback state when the polled session becomes signed out.
       syncNowPlaying(null);
       setCommentPayload(EMPTY_COMMENT_PAYLOAD);
       return;

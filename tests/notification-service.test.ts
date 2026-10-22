@@ -11,6 +11,7 @@ describe("buildDiscordMessage", () => {
         artistNames: ["Artist 1"],
         spotifyUrl: "https://open.spotify.com/track/track-1",
         addedByDisplayName: "Alice",
+        addedBySpotifyUserId: "user-1",
       },
     ],
   };
@@ -28,6 +29,9 @@ describe("buildDiscordMessage", () => {
     const message = buildDiscordMessage(payload, false);
 
     expect(Array.isArray(message)).toBe(true);
+    if (!Array.isArray(message)) {
+      throw new Error("Expected one Discord payload per track");
+    }
     expect(message[0]?.content).toContain("Track 1");
   });
 });
