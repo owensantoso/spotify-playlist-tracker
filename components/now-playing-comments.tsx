@@ -818,10 +818,12 @@ export function NowPlayingComments({
   const threadsFeatureAvailable = localCommentPayload.featureAvailable;
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Reconcile locally edited comments with the latest remote payload.
     setLocalCommentPayload(commentPayload);
   }, [commentPayload]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Preserve the existing editor reset when the remote playback track changes.
     setOpenMarkerBucket(null);
     setLinkedBucket(null);
     setPopupBucket(null);
@@ -882,6 +884,7 @@ export function NowPlayingComments({
 
   useEffect(() => {
     if (!track || !markers.length) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clear playback overlays when their remote track or markers disappear.
       setPopupBucket(null);
       return;
     }
